@@ -676,7 +676,8 @@ body::before {
 .hidden { display: none !important; }
 
 /* ---- 配当表 ---- */
-.paytable-overlay {
+.paytable-overlay,
+.player-overlay {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -687,6 +688,63 @@ body::before {
   padding: 20px;
   backdrop-filter: blur(6px);
 }
+
+/* プレイヤー選択（3人別々のクレジット） */
+.player-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: #cdf;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.player-btn b { color: var(--neon); font-weight: 800; }
+.player-btn:hover { border-color: var(--neon); }
+.player-panel {
+  width: min(460px, 100%);
+  background: linear-gradient(180deg, #15153a, #0c0c24);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+  text-align: center;
+}
+.player-panel h2 { margin: 0 0 4px; font-size: 22px; }
+.player-sub { margin: 0 0 16px; font-size: 12px; opacity: 0.7; }
+.player-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.player-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.player-card.current {
+  border-color: var(--neon);
+  box-shadow: 0 0 14px rgba(79, 195, 255, 0.25);
+}
+.player-name-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 8px 10px;
+  width: 100%;
+}
+.player-name-input:focus { outline: none; border-color: var(--gold); }
+.player-credits { font-size: 13px; opacity: 0.8; white-space: nowrap; }
+.player-credits b { color: var(--gold); font-size: 16px; }
+.player-card [data-play] { grid-column: 1 / -1; }
 .paytable {
   width: min(560px, 100%);
   max-height: 86vh;

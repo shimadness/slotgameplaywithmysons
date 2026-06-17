@@ -2,7 +2,7 @@
 // 2モード搭載: ①3×3 DROP（連鎖パズル×スロット） ②5リール本格派
 import "./style.css";
 import { ReelEngine } from "./game/engine";
-import { GameState } from "./game/state";
+import { GameState, type PlayerId } from "./game/state";
 import {
   evaluate,
   freeSpinsFor,
@@ -37,6 +37,9 @@ app.innerHTML = `
     <header class="title">
       <h1>TRIPLE <span>SLOT</span></h1>
       <div class="header-tools">
+        <button class="player-btn" data-player title="プレイヤーを切り替え">
+          👤 <b data-player-name>プレイヤー1</b>
+        </button>
         <div class="mode-switch">
           <button class="mode-btn active" data-mode="drop">3×3 DROP</button>
           <button class="mode-btn" data-mode="slot">5リール</button>
@@ -65,6 +68,7 @@ board.el.classList.add("hidden");
 
 const effects = new Effects(machine, board);
 
+let playerOverlay: HTMLElement;
 let mode: Mode = "drop";
 let busy = false;
 let autoPlay = false;
@@ -164,6 +168,21 @@ setteiBtn.addEventListener("click", () => {
   updateSetteiLabel();
   void effects.banner(`設定 ${state.settei}（払出 ${Math.round(state.targetRtp * 100)}%）`, 1100);
 });
+
+// ---- プレイヤー（3人別々のクレジット）------------------------------
+const playerNameEl = app.querySelector("[data-player-name]") as HTMLElement;
+function updatePlayerName(): void {
+  playerNameEl.textContent = state.playerName;
+}
+updatePlayerName();
+buildPlayerPicker();
+app.querySelector("[data-player]")!.addEventListener("click", () => {
+  if (busy || state.inRush || autoPlay) return;
+  sfx.resume();
+  sfx.ui();
+  openPlayerPicker();
+});
+if (state.firstRun) openPlayerPicker(); // 初回はプレイヤー選択を出す
 
 buildPaytable();
 
@@ -384,6 +403,78 @@ async function finishRush(): Promise<void> {
   effects.burst(160);
   await effects.banner(`RUSH 終了！ 獲得 ${total.toLocaleString()}`, 2400);
   maybeAutoNext();
+}
+
+// ---- プレイヤー選択（3人別々のクレジット）--------------------------
+function buildPlayerPicker(): void {
+  playerOverlay = document.createElement("div");
+  playerOverlay.className = "player-overlay hidden";
+  playerOverlay.innerHTML = `
+    <div class="player-panel">
+      <h2>だれが あそぶ？</h2>
+      <p class="player-sub">名前はタップして変えられるよ</p>
+      <div class="player-list" data-player-list></div>
+      <button class="btn ghost" data-player-close>とじる</button>
+    </div>`;
+  app.appendChild(playerOverlay);
+
+  playerOverlay
+    .querySelector("[data-player-close]")!
+    .addEventListener("click", () => closePlayerPicker());
+  playerOverlay.addEventListener("click", (e) => {
+    if (e.target === playerOverlay && !state.firstRun) closePlayerPicker();
+  });
+}
+
+function renderPlayerList(): void {
+  const list = playerOverlay.querySelector("[data-player-list]") as HTMLElement;
+  list.innerHTML = state
+    .allPlayers()
+    .map(
+      (p) => `
+      <div class="player-card${p.id === state.playerId ? " current" : ""}">
+        <input class="player-name-input" data-pid="${p.id}" maxlength="12"
+               value="${escapeHtml(p.name)}" aria-label="名前" />
+        <div class="player-credits">CREDIT <b>${p.credits.toLocaleString()}</b></div>
+        <button class="btn primary" data-play="${p.id}">これで あそぶ</button>
+      </div>`
+    )
+    .join("");
+
+  list.querySelectorAll<HTMLInputElement>(".player-name-input").forEach((inp) => {
+    const pid = inp.dataset.pid as PlayerId;
+    const commit = () => {
+      state.setName(pid, inp.value);
+      if (pid === state.playerId) updatePlayerName();
+    };
+    inp.addEventListener("change", commit);
+    inp.addEventListener("blur", commit);
+  });
+  list.querySelectorAll<HTMLButtonElement>("[data-play]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      sfx.resume();
+      sfx.ui();
+      state.switchPlayer(btn.dataset.play as PlayerId);
+      updatePlayerName();
+      updateSetteiLabel();
+      hud.update();
+      closePlayerPicker();
+    });
+  });
+}
+
+function openPlayerPicker(): void {
+  renderPlayerList();
+  playerOverlay.classList.remove("hidden");
+}
+function closePlayerPicker(): void {
+  playerOverlay.classList.add("hidden");
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!)
+  );
 }
 
 // ---- 配当表 --------------------------------------------------------

@@ -201,11 +201,17 @@ glyph.animate([
 - `setInterval` で60ms先の音符を先行スケジュール（バッファオーバーランを防ぐ）
 - 8ステップのアルペジオループ、152BPM
 
-### クレジット / ベット管理（`src/game/state.ts`）
-- `lineBet`: 1/2/3/5/10 を循環
-- `totalBet = lineBet × 10`（DROPモードは基本的にlineBetで計算）
-- `credits` / `bet` は `localStorage` に自動保存
-- 残高不足時 → HUD に「+1000補充」ボタン表示
+### プレイヤー / クレジット / ベット管理（`src/game/state.ts`）
+- **プレイヤーは3人（`PLAYER_IDS = p1/p2/p3`）。各自で別々のセーブ**。
+  - 保存キー：`triple-slot.save.<id>`（credits / lineBetIndex / settei）。
+  - `triple-slot.meta`：3人の名前 + 直近プレイヤー（`current`）。
+  - `switchPlayer(id)` でその人のデータをロード（RUSH等の一時状態はリセット）。
+  - 初回（`current` 未設定）は `firstRun=true` → 起動時にプレイヤー選択を表示。
+  - `setName(id, name)`（12文字まで）、`allPlayers()`/`peekCredits(id)` で選択画面に残高表示。
+  - サーバー無し構成のため **クレジットは端末ごとに保存**（端末間同期はしない）。
+- `lineBet`: 1/2/3/5/10 を循環。`totalBet = lineBet × 10`。
+- 残高不足時 → HUD に「+1000補充」ボタン表示。
+- UI: 起動時のプレイヤー選択オーバーレイ＋ヘッダー「👤 名前」ボタンで切替（`main.ts`）。
 
 ### AUTO プレイ（`src/main.ts`, `src/ui/hud.ts`）
 - `autoPlay` フラグ。HUD に金色「AUTO ●」インジケーター
