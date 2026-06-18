@@ -311,28 +311,46 @@ body::before {
 .dcell.is-blank .glyph,
 .ptube-cell.is-blank .glyph { opacity: 0.35; filter: none; }
 
-/* オッズパネル（各シンボルの現在ライン・オッズ。役成立で上昇） */
+/* スロット右側に縦並びのオッズ表（左端揃え） */
+.drop-main-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+}
+.drop-left { display: flex; flex-direction: column; align-items: center; gap: var(--dgap, 8px); }
 .odds-panel {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px 6px;
-  margin-top: 10px;
-  max-width: 100%;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 18px; /* NEXT ラベルぶん下げてグリッド頭に揃える */
 }
 .odds-row {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
-  border-radius: 999px;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--panel-border);
   font-size: 12px;
 }
-.odds-row .odds-glyph { font-size: 13px; line-height: 1; }
-.odds-row.is-text .odds-glyph { color: var(--sym-color); font-weight: 900; font-style: italic; }
-.odds-val { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--gold); }
+.odds-row .odds-glyph {
+  font-size: 14px;
+  line-height: 1;
+  min-width: 1.3em;      /* 左端を揃える（テキスト系は自然幅で伸びる） */
+  text-align: left;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.odds-row.is-text .odds-glyph { font-size: 12px; color: var(--sym-color); font-weight: 900; font-style: italic; }
+.odds-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  color: var(--gold);
+  margin-left: auto;     /* オッズ値は右寄せ、記号は左端 */
+  padding-left: 8px;
+}
 .odds-row.up {
   animation: oddsUp 0.6s ease;
 }
@@ -898,13 +916,14 @@ body.rush-active .title h1 {
   /* 盤面を「画面の高さ」にも連動させて自動縮小し、HUDまで1画面に収める。
      横幅・高さ・上限116の3条件の min。高さ項の定数=タイトル+HUD等の確保分。 */
   .drop-stack {
-    /* オッズパネルぶんを高さ予約に追加（1画面に収める） */
-    --dcell: min(106px, calc((100vw - 64px) / 3), calc((100vh - 500px) / 4));
+    /* 横にオッズ列があるぶん幅から差し引く。高さは縦並びなので食わない。 */
+    --dcell: min(96px, calc((100vw - 136px) / 3), calc((100vh - 432px) / 4));
   }
   .drop-previews { margin-top: 12px; }
-  /* オッズパネルをモバイルで圧縮 */
-  .odds-panel { gap: 3px 4px; margin-top: 6px; }
-  .odds-row { padding: 1px 5px; font-size: 10px; }
+  /* オッズ列をモバイルで圧縮 */
+  .drop-main-row { gap: 6px; }
+  .odds-panel { gap: 2px; padding-top: 16px; }
+  .odds-row { padding: 1px 5px; font-size: 10px; gap: 4px; }
   .odds-row .odds-glyph { font-size: 11px; }
 
   /* メーターは1行4列のコンパクト表示に */

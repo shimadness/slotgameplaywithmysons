@@ -209,11 +209,12 @@ function lineSymbol(g: DGrid, cells: Array<[number, number]>): DSym | null {
     if (base === null) base = s;
     else if (base !== s) return null;
   }
-  return base; // null = 全wild（役にしない）
+  // 全部ワイルド（base=null）は全シンボル代用＝最高位 red7 として成立させる
+  return base ?? "red7";
 }
 
 // ---- コネクト判定（同シンボルの隣接クラスター。wild 代用） -----------
-function findConnects(g: DGrid): ConnectWin[] {
+export function findConnects(g: DGrid): ConnectWin[] {
   const bases = new Set<DSym>();
   for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
     const s = g[c][r];
@@ -250,6 +251,26 @@ function findConnects(g: DGrid): ConnectWin[] {
         out.push({ symbol: base, count: free.length, pay, cells: free });
       }
     }
+  }
+  // 純ワイルドのみの隣接(3個以上)＝全シンボル代用なので最高位 red7 のコネクトとして支払う
+  const covered = new Set<string>();
+  for (const w of out) for (const [c, r] of w.cells) covered.add(`${c},${r}`);
+  const seenW = Array.from({ length: COLS }, () => new Array(ROWS).fill(false));
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    if (seenW[c][r] || g[c][r] !== "wild" || covered.has(`${c},${r}`)) continue;
+    const comp: Array<[number, number]> = [];
+    const stack: Array<[number, number]> = [[c, r]];
+    seenW[c][r] = true;
+    while (stack.length) {
+      const [cc, rr] = stack.pop()!;
+      comp.push([cc, rr]);
+      for (const [nc, nr] of neighbors(cc, rr))
+        if (!seenW[nc][nr] && g[nc][nr] === "wild" && !covered.has(`${nc},${nr}`)) {
+          seenW[nc][nr] = true; stack.push([nc, nr]);
+        }
+    }
+    if (comp.length >= 3)
+      out.push({ symbol: "red7", count: comp.length, pay: connectPay("red7", comp.length), cells: comp });
   }
   return out;
 }

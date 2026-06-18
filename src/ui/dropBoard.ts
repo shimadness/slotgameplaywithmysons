@@ -59,7 +59,13 @@ export class DropBoard {
       }
       previews.appendChild(tube);
     }
-    this.el.appendChild(previews);
+
+    // 左カラム（プレビュー＋グリッド）＋ 右カラム（オッズ縦並び）を横並びに
+    const mainRow = document.createElement("div");
+    mainRow.className = "drop-main-row";
+    const leftCol = document.createElement("div");
+    leftCol.className = "drop-left";
+    leftCol.appendChild(previews);
 
     // グリッド＋道レイヤー
     const wrap = document.createElement("div");
@@ -83,10 +89,12 @@ export class DropBoard {
         (this.badges[c] ??= [])[r] = badge;
       }
     wrap.appendChild(grid);
-    this.el.appendChild(wrap);
+    leftCol.appendChild(wrap);
 
-    // オッズ表示（11シンボルの現在オッズ。役成立で上昇する様子を見せる）
-    this.el.appendChild(this.buildOddsPanel());
+    mainRow.appendChild(leftCol);
+    // オッズ表示（11シンボルの現在オッズ。役成立で上昇）をスロット右側に縦並び
+    mainRow.appendChild(this.buildOddsPanel());
+    this.el.appendChild(mainRow);
   }
 
   // --- オッズパネル --------------------------------------------------
@@ -96,6 +104,8 @@ export class DropBoard {
     for (const id of [...BASE_SYMS].reverse()) {
       const row = document.createElement("div");
       row.className = "odds-row";
+      if (id === "bar" || id === "bar2" || id === "bar3" || id === "blue7" || id === "red7")
+        row.classList.add("is-text");
       row.style.setProperty("--sym-color", dsym(id).color);
       const g = document.createElement("span");
       g.className = "odds-glyph glyph";
