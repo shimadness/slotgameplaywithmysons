@@ -12,9 +12,8 @@ import {
   type DropResult,
 } from "../game/drop";
 
-const DCELL = 116; // ドロップセルの高さ(px)。CSS の --dcell と一致。
+const DCELL = 116; // ドロップセルの高さ(px)のフォールバック。CSS の --dcell 上限と一致。
 const GAP = 8; // セル間ギャップ(px)。CSS の --dgap と一致。
-const PITCH = DCELL + GAP; // 1行ぶんの送り量(px)。プレビュー管も「行 -1」として等ピッチで並ぶ。
 // ぷよぷよ風：重力で加速しながら、落下距離に応じた時間で落ちる（距離∝t²）。
 const FALL_BASE_MS = 320; // 1セルぶん落下の基準時間
 const SQUASH_MS = 140; // 着地時の潰れ＆復帰
@@ -102,6 +101,12 @@ export class DropBoard {
   // --- 「道」レイヤー（セル間の通路。揃った繋がりを点灯して見せる） ------
   private roads = new Map<string, SVGLineElement>();
 
+  /** 1行ぶんの送り量(px)。CSS の --dcell が画面幅で可変なので実寸から測る。 */
+  private pitch(): number {
+    const h = this.cells[0]?.[0]?.offsetHeight || DCELL;
+    return h + GAP;
+  }
+
   /** 同一クラスター内の隣接(8方向)を結ぶ通路を生成 */
   private buildRoads(): SVGSVGElement {
     const NS = "http://www.w3.org/2000/svg";
@@ -177,7 +182,7 @@ export class DropBoard {
     if (fromOffsetPx !== undefined && fromOffsetPx !== 0) {
       // ぷよぷよ風：重力で「だんだん速く」落ち、着地でグニャッと潰れて戻る。
       // 落下距離(セル数)に応じて時間が伸びる（自由落下: 距離 ∝ t² → t ∝ √距離）。
-      const cells = Math.abs(fromOffsetPx) / PITCH;
+      const cells = Math.abs(fromOffsetPx) / this.pitch();
       const fallMs = Math.round(FALL_BASE_MS * Math.sqrt(cells));
       const totalMs = fallMs + SQUASH_MS;
       const land = fallMs / totalMs; // 着地した瞬間の進捗
@@ -197,6 +202,21 @@ export class DropBoard {
         ],
         { duration: totalMs, fill: "backwards" }
       );
+      // ワイルドの残回数バッジは絶対配置なので、グリフと一緒に落とさないと
+      // 「落下中はバッジだけ着地セルに先に出る」＝非ワイルドに5が出て見える。
+      // グリフと同じ縦移動でバッジも追従させる。
+      if (wildLeft > 0) {
+        const badge = this.badges[c][r];
+        badge.animate(
+          [
+            { transform: `translateY(${fromOffsetPx}px)`,
+              easing: "cubic-bezier(0.45, 0, 0.85, 0.6)" },
+            { transform: "translateY(0px)", offset: land },
+            { transform: "translateY(0px)" },
+          ],
+          { duration: totalMs, fill: "backwards" }
+        );
+      }
     }
   }
 
@@ -228,7 +248,7 @@ export class DropBoard {
     this.clearRoads();
     for (let c = 0; c < COLS; c++)
       for (let r = 0; r < ROWS; r++) {
-        const off = from ? (from[c][r] - r) * PITCH : undefined;
+        const off = from ? (from[c][r] - r) * this.pitch() : undefined;
         this.paintCell(c, r, grid[c][r], off, wild ? wild[c][r] : 0);
       }
   }
@@ -251,7 +271,7 @@ export class DropBoard {
         if (animate && changed) {
           glyph.animate(
             [
-              { transform: `translateY(${-PITCH}px)`, opacity: "0.3",
+              { transform: `translateY(${-this.pitch()}px)`, opacity: "0.3",
                 easing: "cubic-bezier(0.45, 0, 0.85, 0.6)" },
               { transform: "translateY(0px)", opacity: "1" },
             ],

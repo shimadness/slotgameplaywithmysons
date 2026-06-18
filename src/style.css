@@ -827,26 +827,51 @@ body.rush-active .title h1 {
 
 @media (max-width: 560px) {
   :root { --cell: 60px; --reel-gap: 5px; }
-  body { padding: 12px 8px 36px; }
-  .cabinet { padding: 12px; border-radius: 16px; }
+  body { padding: 10px 8px 16px; }
+  .cabinet { padding: 10px; border-radius: 16px; }
   .machine { padding: 10px; }
-  .controls { grid-template-columns: 1fr 1fr; }
-  .btn.primary { grid-column: span 2; }
 
   /* タイトル行を縦積みに：h1を1段、ツール群を下段で折り返し横並び */
   .title {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 6px;
+    margin-bottom: 8px;
   }
   .title h1 {
     text-align: center;
-    font-size: clamp(26px, 8vw, 36px);
+    font-size: clamp(22px, 7vw, 30px);
   }
   .header-tools {
     flex-wrap: wrap;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
   }
+  /* ボタン類を一回り小さく（1画面に収めるため） */
+  .paytable-btn, .settei-btn, .player-btn { padding: 6px 10px; font-size: 12px; }
+  .mode-btn { padding: 6px 10px; font-size: 11px; }
+
+  /* 盤面を「画面の高さ」にも連動させて自動縮小し、HUDまで1画面に収める。
+     横幅・高さ・上限116の3条件の min。高さ項の定数=タイトル+HUD等の確保分。 */
+  .drop-stack {
+    --dcell: min(106px, calc((100vw - 64px) / 3), calc((100vh - 432px) / 4));
+  }
+  .drop-previews { margin-top: 12px; }
+
+  /* メーターは1行4列のコンパクト表示に */
+  .meters {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .meter { padding: 6px 8px; }
+  .meter-label { font-size: 9px; letter-spacing: 0; }
+  .meter-val { font-size: 16px; }
+
+  /* 操作ボタンを2列・低めにしてSPINを横いっぱい */
+  .hud { margin-top: 10px; }
+  .controls { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn.primary { grid-column: span 2; }
+  .btn { padding: 11px 8px; font-size: 14px; }
+  .btn.primary { font-size: 18px; }
 }

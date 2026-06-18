@@ -64,9 +64,10 @@ export const SETTEI_RTP: Record<number, number> = {
 };
 export const DEFAULT_SETTEI = 4; // 既定=95%
 /** 構造（配当・RUSH）固定で実測・較正した「素のRTP」基準値。
- *  scale=1.0 の素RTP≈637%。丸め下限の影響込みで操作点(設定4)が95%になるよう較正。
+ *  scale=1.0 の素RTP≈747%（共有ワイルド導入で上昇）。丸め下限の影響込みで
+ *  操作点(設定4)が約95%になるよう較正（測定はRUSH由来で±3%程度ばらつく）。
  *  構造を変えたら `npm run rtp` で再計測して更新する。 */
-export const RAW_RTP = 6.5;
+export const RAW_RTP = 7.6;
 /** 設定 → 配当スケール係数 */
 export function payoutScaleFor(settei: number): number {
   const target = SETTEI_RTP[settei] ?? SETTEI_RTP[DEFAULT_SETTEI];
@@ -215,19 +216,26 @@ function findClusters(g: DGrid): Cluster[] {
       }
   }
 
-  // 価値の高いクラスターから貪欲にセルを確定（ワイルドの二重取りを防ぐ）
+  // 価値の高いクラスターから貪欲にセルを確定する。
+  // ワイルドファイブは「消えずに最大5回使える代用」なので、1つのワイルドが
+  // 複数のクラスター（別シンボル）を同時に成立させてよい＝独占クレームしない。
+  // 一方、土台シンボルのセルは二重取りを防ぐため1クラスターに確定する。
   cands.sort(
     (a, b) =>
       CLUSTER_VALUE[b.base] * b.cells.length -
       CLUSTER_VALUE[a.base] * a.cells.length
   );
-  const claimed = new Set<string>();
+  const claimed = new Set<string>(); // 土台シンボルのセルのみ確定（ワイルドは含めない）
   const clusters: Cluster[] = [];
   for (const cand of cands) {
-    const free = cand.cells.filter(([c, r]) => !claimed.has(`${c},${r}`));
+    // ワイルドは常に共有可、土台セルは未確定のものだけ使える
+    const free = cand.cells.filter(
+      ([c, r]) => g[c][r] === "wild" || !claimed.has(`${c},${r}`)
+    );
     const hasBase = free.some(([c, r]) => g[c][r] === cand.base);
     if (free.length >= 3 && hasBase) {
-      for (const [c, r] of free) claimed.add(`${c},${r}`);
+      for (const [c, r] of free)
+        if (g[c][r] !== "wild") claimed.add(`${c},${r}`); // 土台のみ確定
       clusters.push({ symbol: cand.base, cells: free, size: free.length, amount: 0 });
     }
   }
@@ -322,6 +330,7 @@ export function play(
     charges = charges.map((col) => col.slice());
     const cleared: Array<[number, number]> = [];
     let stepWin = 0;
+    // 配当はクラスター毎に加算（共有ワイルドは両クラスターの配当に寄与する）
     for (const cl of clusters) {
       const raw =
         CLUSTER_VALUE[cl.symbol] * cl.size * mult * lineBet * rushMultiplier;
@@ -329,7 +338,15 @@ export function play(
       const amt = Math.max(1, Math.round(raw * payoutScale));
       cl.amount = amt;
       stepWin += amt;
+    }
+    // セルの消去／ワイルド減算は「セル単位で1回だけ」処理する。
+    // （共有ワイルドが複数クラスターに跨っても、減算は1回・消去も1回）
+    const processed = new Set<string>();
+    for (const cl of clusters) {
       for (const [c, r] of cl.cells) {
+        const key = `${c},${r}`;
+        if (processed.has(key)) continue;
+        processed.add(key);
         if (grid[c][r] === "wild" && charges[c][r] > 1) {
           // ワイルドファイブ：消えずに残り回数を1減らして生存（下へ落ちる）
           charges[c][r] -= 1;
