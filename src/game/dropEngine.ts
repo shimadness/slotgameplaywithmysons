@@ -50,7 +50,7 @@ export const DSYMBOLS: Record<DSym, DSymDef> = {
 
 /** 氷（凍結）出現率＝新しい全体RTPダイヤル。凍ったセルは溶けるまで役に使えない
  *  （隣接セルが役成立で溶ける）。出現率を上げるほど実効マッチ率↓＝RTP↓。rtpで較正。 */
-export let FREEZE_RATE = 0.355;
+export let FREEZE_RATE = 0.5;
 export function setFreezeRate(x: number): void { FREEZE_RATE = x; }
 function freezeRoll(): boolean { return Math.random() < FREEZE_RATE; }
 
@@ -310,7 +310,7 @@ function collapse(
       const rr = spawnCount - 1 - j;
       col[rr] = taken[j];
       colCh[rr] = taken[j] === "wild" ? WILD_USES : 0;
-      colFz[rr] = freezeRoll(); // 新規補充は氷判定
+      colFz[rr] = false; // NEXT(補充)からは氷は降ってこない（初期9マスのみ氷）
       colFrom[rr] = rr - spawnCount;
     }
     for (let i = 0; i < survivors.length; i++) {
