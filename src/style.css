@@ -168,7 +168,8 @@ body::before {
 
 /* 3×3 ドロップ盤面 */
 .drop-stack {
-  --dcell: 116px;
+  /* 画面幅に応じて自動縮小（最大116px）。グリッドとプレビュー管が常に同ピッチで揃う */
+  --dcell: min(116px, calc((100vw - 72px) / 3));
   --dgap: 8px;
   display: flex;
   flex-direction: column;
@@ -826,9 +827,26 @@ body.rush-active .title h1 {
 
 @media (max-width: 560px) {
   :root { --cell: 60px; --reel-gap: 5px; }
+  body { padding: 12px 8px 36px; }
+  .cabinet { padding: 12px; border-radius: 16px; }
   .machine { padding: 10px; }
   .controls { grid-template-columns: 1fr 1fr; }
   .btn.primary { grid-column: span 2; }
-  .drop-grid { --dcell: 88px; }
-  .header-tools { flex-direction: column; align-items: flex-end; gap: 6px; }
+
+  /* タイトル行を縦積みに：h1を1段、ツール群を下段で折り返し横並び */
+  .title {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .title h1 {
+    text-align: center;
+    font-size: clamp(26px, 8vw, 36px);
+  }
+  .header-tools {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
 }
