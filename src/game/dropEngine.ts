@@ -13,7 +13,7 @@
 export type DSym =
   | "cherry" | "orange" | "plum" | "banana" | "melon" | "bell"
   | "bar" | "bar2" | "bar3" | "blue7" | "red7" | "gold7"
-  | "wild" | "blank";
+  | "wild";
 
 /** 配当に関わる土台シンボル（弱→強・11種）。gold7/wild は別扱い。 */
 export const BASE_SYMS: DSym[] = [
@@ -32,7 +32,7 @@ export interface DSymDef {
 }
 
 export const DSYMBOLS: Record<DSym, DSymDef> = {
-  // weight は RTP 較正済み（設定なし固定配当・1BET経済で約95%。blank が全体ダイヤル）。
+  // weight は弱→強。全体RTPは FREEZE_RATE（氷出現率）で調整（固定配当・1BET経済で約95%）。
   cherry: { id: "cherry", glyph: "🍒", color: "#ff5c7a", lineOdds: 1, weight: 100 },
   orange: { id: "orange", glyph: "🍊", color: "#ff9f1c", lineOdds: 2, weight: 84 },
   plum:   { id: "plum",   glyph: "🍇", color: "#9b5de5", lineOdds: 3, weight: 68 },
@@ -46,10 +46,13 @@ export const DSYMBOLS: Record<DSym, DSymDef> = {
   red7:   { id: "red7",   glyph: "7", color: "#ef4444", lineOdds: 20, weight: 0.28 },
   gold7:  { id: "gold7",  glyph: "7", color: "#ffd24a", lineOdds: 1000, weight: 0.02 },
   wild:   { id: "wild",   glyph: "✨", color: "#fff27a", lineOdds: 0, weight: 4 },
-  // ブランク＝無配当のハズレ目（空き枠）。ラインもコネクトも作らない。重みが全体RTPダイヤル。
-  // 揃って見えないよう、絵柄は持たせず CSS で「へこんだ空セル」に描画する。
-  blank:  { id: "blank",  glyph: "", color: "#2a3550", lineOdds: 0, weight: 92 },
 };
+
+/** 氷（凍結）出現率＝新しい全体RTPダイヤル。凍ったセルは溶けるまで役に使えない
+ *  （隣接セルが役成立で溶ける）。出現率を上げるほど実効マッチ率↓＝RTP↓。rtpで較正。 */
+export let FREEZE_RATE = 0.355;
+export function setFreezeRate(x: number): void { FREEZE_RATE = x; }
+function freezeRoll(): boolean { return Math.random() < FREEZE_RATE; }
 
 export const COLS = 3;
 export const ROWS = 3;
@@ -152,6 +155,10 @@ export interface CascadeStep {
   stepWin: number;
   gridAfter: DGrid;
   wildAfter: number[][];
+  /** frozenAfter[col][row] = 落下後の凍結状態（true=氷） */
+  frozenAfter: boolean[][];
+  /** このステップで溶けた氷のセル（演出用） */
+  melted: Array<[number, number]>;
   oddsAfter: Record<string, number>; // 表示用：各土台シンボルの現在オッズ
   from: number[][];
   previewAfter: DSym[][];
@@ -159,6 +166,8 @@ export interface CascadeStep {
 export interface DropResult {
   initial: DGrid;
   initialWild: number[][];
+  /** 初期盤面の凍結状態（true=氷） */
+  initialFrozen: boolean[][];
   initialPreview: DSym[][];
   oddsStart: Record<string, number>;
   steps: CascadeStep[];
@@ -185,14 +194,14 @@ export function rebuildPool(): void { POOL = buildPool(); }
 function pick(): DSym { return POOL[(Math.random() * POOL.length) | 0]; }
 export function randomDropSymbol(): DSym { return pick(); }
 
-function randomGrid(): DGrid {
-  const g: DGrid = [];
+function randomBoard(): { grid: DGrid; frozen: boolean[][] } {
+  const g: DGrid = [], f: boolean[][] = [];
   for (let c = 0; c < COLS; c++) {
-    const col: DSym[] = [];
-    for (let r = 0; r < ROWS; r++) col.push(pick());
-    g.push(col);
+    const col: DSym[] = [], fc: boolean[] = [];
+    for (let r = 0; r < ROWS; r++) { col.push(pick()); fc.push(freezeRoll()); }
+    g.push(col); f.push(fc);
   }
-  return g;
+  return { grid: g, frozen: f };
 }
 function cloneGrid(g: DGrid): DGrid { return g.map((c) => c.slice()); }
 function wildChargesOf(g: DGrid): number[][] {
@@ -201,11 +210,11 @@ function wildChargesOf(g: DGrid): number[][] {
 
 // ---- ライン判定（wild 代用） --------------------------------------
 /** ライン上の3セルが揃うか。揃う場合その土台シンボルを返す（全wildやgold混在は別途）。 */
-function lineSymbol(g: DGrid, cells: Array<[number, number]>): DSym | null {
+function lineSymbol(g: DGrid, fz: boolean[][], cells: Array<[number, number]>): DSym | null {
   let base: DSym | null = null;
   for (const [c, r] of cells) {
+    if (fz[c][r]) return null; // 氷が1つでもあればライン不成立（溶けるまで使えない）
     const s = g[c][r];
-    if (s === "blank") return null; // ブランクが1つでもあればライン不成立
     if (s === "wild") continue;
     if (base === null) base = s;
     else if (base !== s) return null;
@@ -215,11 +224,12 @@ function lineSymbol(g: DGrid, cells: Array<[number, number]>): DSym | null {
 }
 
 // ---- コネクト判定（同シンボルの隣接クラスター。wild 代用） -----------
-export function findConnects(g: DGrid): ConnectWin[] {
+export function findConnects(g: DGrid, fz: boolean[][]): ConnectWin[] {
   const bases = new Set<DSym>();
   for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    if (fz[c][r]) continue; // 氷は役に使えない
     const s = g[c][r];
-    if (s !== "wild" && s !== "blank") bases.add(s);
+    if (s !== "wild") bases.add(s);
   }
   const out: ConnectWin[] = [];
   const claimed = new Set<string>(); // 土台セルのみ確定（wildは共有可）
@@ -229,7 +239,7 @@ export function findConnects(g: DGrid): ConnectWin[] {
   );
   for (const base of order) {
     if (base === "gold7") continue; // gold7 はコネクト対象外
-    const match = (c: number, r: number) => g[c][r] === base || g[c][r] === "wild";
+    const match = (c: number, r: number) => !fz[c][r] && (g[c][r] === base || g[c][r] === "wild");
     const seen = Array.from({ length: COLS }, () => new Array(ROWS).fill(false));
     for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
       if (seen[c][r] || !match(c, r)) continue;
@@ -257,8 +267,9 @@ export function findConnects(g: DGrid): ConnectWin[] {
   const covered = new Set<string>();
   for (const w of out) for (const [c, r] of w.cells) covered.add(`${c},${r}`);
   const seenW = Array.from({ length: COLS }, () => new Array(ROWS).fill(false));
+  const wildAt = (c: number, r: number) => g[c][r] === "wild" && !fz[c][r];
   for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
-    if (seenW[c][r] || g[c][r] !== "wild" || covered.has(`${c},${r}`)) continue;
+    if (seenW[c][r] || !wildAt(c, r) || covered.has(`${c},${r}`)) continue;
     const comp: Array<[number, number]> = [];
     const stack: Array<[number, number]> = [[c, r]];
     seenW[c][r] = true;
@@ -266,7 +277,7 @@ export function findConnects(g: DGrid): ConnectWin[] {
       const [cc, rr] = stack.pop()!;
       comp.push([cc, rr]);
       for (const [nc, nr] of neighbors(cc, rr))
-        if (!seenW[nc][nr] && g[nc][nr] === "wild" && !covered.has(`${nc},${nr}`)) {
+        if (!seenW[nc][nr] && wildAt(nc, nr) && !covered.has(`${nc},${nr}`)) {
           seenW[nc][nr] = true; stack.push([nc, nr]);
         }
     }
@@ -279,33 +290,37 @@ export function findConnects(g: DGrid): ConnectWin[] {
 // ---- 落下＆補充（旧版踏襲） ---------------------------------------
 export const PREVIEW_ROWS = 1;
 function collapse(
-  g: DGrid, ch: number[][], cleared: Array<[number, number]>, streams: DSym[][]
-): { grid: DGrid; charges: number[][]; from: number[][] } {
+  g: DGrid, ch: number[][], fz: boolean[][], cleared: Array<[number, number]>, streams: DSym[][]
+): { grid: DGrid; charges: number[][]; frozen: boolean[][]; from: number[][] } {
   const clearedSet = new Set(cleared.map(([c, r]) => `${c},${r}`));
-  const out: DGrid = [], outCh: number[][] = [], from: number[][] = [];
+  const out: DGrid = [], outCh: number[][] = [], outFz: boolean[][] = [], from: number[][] = [];
   for (let c = 0; c < COLS; c++) {
-    const survivors: Array<{ sym: DSym; charge: number; row: number }> = [];
+    const survivors: Array<{ sym: DSym; charge: number; frozen: boolean; row: number }> = [];
     for (let r = 0; r < ROWS; r++)
-      if (!clearedSet.has(`${c},${r}`)) survivors.push({ sym: g[c][r], charge: ch[c][r], row: r });
+      if (!clearedSet.has(`${c},${r}`))
+        survivors.push({ sym: g[c][r], charge: ch[c][r], frozen: fz[c][r], row: r });
     const spawnCount = ROWS - survivors.length;
     const taken = streams[c].splice(0, spawnCount);
     while (streams[c].length < PREVIEW_ROWS + 3) streams[c].push(pick());
     const col: DSym[] = new Array(ROWS);
     const colCh: number[] = new Array(ROWS);
+    const colFz: boolean[] = new Array(ROWS);
     const colFrom: number[] = new Array(ROWS);
     for (let j = 0; j < spawnCount; j++) {
       const rr = spawnCount - 1 - j;
       col[rr] = taken[j];
       colCh[rr] = taken[j] === "wild" ? WILD_USES : 0;
+      colFz[rr] = freezeRoll(); // 新規補充は氷判定
       colFrom[rr] = rr - spawnCount;
     }
     for (let i = 0; i < survivors.length; i++) {
       const fr = spawnCount + i;
-      col[fr] = survivors[i].sym; colCh[fr] = survivors[i].charge; colFrom[fr] = survivors[i].row;
+      col[fr] = survivors[i].sym; colCh[fr] = survivors[i].charge;
+      colFz[fr] = survivors[i].frozen; colFrom[fr] = survivors[i].row;
     }
-    out.push(col); outCh.push(colCh); from.push(colFrom);
+    out.push(col); outCh.push(colCh); outFz.push(colFz); from.push(colFrom);
   }
-  return { grid: out, charges: outCh, from };
+  return { grid: out, charges: outCh, frozen: outFz, from };
 }
 function previewOf(streams: DSym[][]): DSym[][] {
   return streams.map((s) => s.slice(0, PREVIEW_ROWS));
@@ -338,7 +353,9 @@ function raiseOdds(oddsIdx: Record<string, number>, sym: DSym): void {
  * @param oddsCarry   フリーゲーム用に持ち越すオッズ状態（無ければ新規）
  */
 export function play(bet: number, oddsCarry?: Record<string, number>): DropResult {
-  const initial = randomGrid();
+  const board = randomBoard();
+  const initial = board.grid;
+  const initialFrozen = board.frozen;
   const streams: DSym[][] = Array.from({ length: COLS }, () =>
     Array.from({ length: PREVIEW_ROWS + 4 }, () => pick())
   );
@@ -349,38 +366,49 @@ export function play(bet: number, oddsCarry?: Record<string, number>): DropResul
 
   let grid = cloneGrid(initial);
   let charges = wildChargesOf(initial);
+  let frozen = initialFrozen.map((c) => c.slice());
   const steps: CascadeStep[] = [];
   let chain = 0, total = 0;
   const MAX_CHAIN = 30;
 
   while (chain < MAX_CHAIN) {
-    // --- ライン判定（オッズは「現在値で支払い → その後上昇」） ---
+    // --- ライン判定（氷は不参加。オッズは「現在値で支払い → その後上昇」） ---
     const lineWins: LineWin[] = [];
     for (let li = 0; li < LINES.length; li++) {
       const cells = LINES[li];
-      const sym = lineSymbol(grid, cells);
-      if (sym === null) continue; // 全wild等は役にしない
+      const sym = lineSymbol(grid, frozen, cells);
+      if (sym === null) continue;
       const odds = oddsValue(oddsIdx, sym);
       const pay = bet * odds;
       lineWins.push({ line: li, symbol: sym, odds, pay, cells: cells.map(([c, r]) => [c, r]) });
     }
-    // --- コネクト判定 ---
-    const connectWins = findConnects(grid).map((w) => ({ ...w, pay: bet * w.pay }))
-      .filter((w) => w.pay > 0 || w.count >= 3); // 0配当でも消去対象にする
-    // 役（ライン or コネクト）が一つも無ければ終了
+    // --- コネクト判定（氷は不参加） ---
+    const connectWins = findConnects(grid, frozen).map((w) => ({ ...w, pay: bet * w.pay }))
+      .filter((w) => w.pay > 0 || w.count >= 3);
     if (lineWins.length === 0 && connectWins.length === 0) break;
     chain++;
 
-    // オッズ上昇（ライン成立ぶん。支払い後に上げる）
     for (const w of lineWins) raiseOdds(oddsIdx, w.symbol);
 
-    // --- 消去セル＝ライン役 ∪ コネクト役 のセル。wild5は減算で生存 ---
-    const cellSet = new Set<string>();
-    for (const w of lineWins) for (const [c, r] of w.cells) cellSet.add(`${c},${r}`);
-    for (const w of connectWins) for (const [c, r] of w.cells) cellSet.add(`${c},${r}`);
+    // 役に使われたセル
+    const winCells = new Set<string>();
+    for (const w of lineWins) for (const [c, r] of w.cells) winCells.add(`${c},${r}`);
+    for (const w of connectWins) for (const [c, r] of w.cells) winCells.add(`${c},${r}`);
+
+    // --- 氷を溶かす：役セルに隣接する氷 → このステップ末で解凍（次カスケードから有効） ---
+    frozen = frozen.map((col) => col.slice());
+    const melted: Array<[number, number]> = [];
+    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+      if (!frozen[c][r]) continue;
+      if (neighbors(c, r).some(([nc, nr]) => winCells.has(`${nc},${nr}`))) {
+        frozen[c][r] = false; melted.push([c, r]);
+      }
+    }
+
+    // --- 消去：役セル（氷は役に入らないので対象外）。wild5は減算で生存 ---
     charges = charges.map((col) => col.slice());
     const cleared: Array<[number, number]> = [];
-    for (const key of cellSet) {
+    for (const key of winCells) {
       const [c, r] = key.split(",").map(Number);
       if (grid[c][r] === "wild" && charges[c][r] > 1) charges[c][r] -= 1;
       else cleared.push([c, r]);
@@ -391,13 +419,15 @@ export function play(bet: number, oddsCarry?: Record<string, number>): DropResul
       connectWins.reduce((s, w) => s + w.pay, 0);
     total += stepWin;
 
-    const { grid: after, charges: chAfter, from } = collapse(grid, charges, cleared, streams);
+    const { grid: after, charges: chAfter, frozen: fzAfter, from } =
+      collapse(grid, charges, frozen, cleared, streams);
     steps.push({
       chain, lineWins, connectWins, comboMult: 0, comboPay: 0,
       cleared, stepWin, gridAfter: after, wildAfter: chAfter,
+      frozenAfter: fzAfter, melted,
       oddsAfter: { ...oddsIdx }, from, previewAfter: previewOf(streams),
     });
-    grid = after; charges = chAfter;
+    grid = after; charges = chAfter; frozen = fzAfter;
   }
 
   // コンボボーナスは連鎖終了時に1回（4連鎖以上で BET×倍率）
@@ -406,7 +436,7 @@ export function play(bet: number, oddsCarry?: Record<string, number>): DropResul
   total += comboPay;
 
   return {
-    initial, initialWild, initialPreview, oddsStart,
+    initial, initialWild, initialFrozen, initialPreview, oddsStart,
     steps, totalWin: total, maxChain: chain,
     comboMult: cMult, comboPay,
   };

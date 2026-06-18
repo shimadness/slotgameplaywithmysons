@@ -308,26 +308,31 @@ body::before {
   color: var(--sym-color);
   text-shadow: 0 0 8px var(--sym-color), 0 1px 0 rgba(0,0,0,0.4);
 }
-/* ブランク（ハズレ目）＝明らかな「空き枠」に。絵柄は出さず、へこんだ空セルに見せる */
-.dcell.is-blank,
-.ptube-cell.is-blank {
-  background: linear-gradient(180deg, rgba(8, 8, 22, 0.7), rgba(4, 4, 14, 0.85));
-  border-color: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.75);
+/* 凍ったアイコン（氷）＝溶けるまで役に使えない。中身は見えるが氷で覆う */
+.dcell.is-frozen {
+  background: linear-gradient(180deg, rgba(150, 210, 255, 0.18), rgba(90, 150, 220, 0.12));
+  border-color: rgba(180, 225, 255, 0.5);
+  box-shadow: inset 0 0 20px rgba(180, 225, 255, 0.35), 0 0 8px rgba(150, 210, 255, 0.3);
 }
-.dcell.is-blank .glyph,
-.ptube-cell.is-blank .glyph { opacity: 0; }
-/* 中央にうっすら「空き」を示す小さなドット */
-.dcell.is-blank::after {
+.dcell.is-frozen .glyph { opacity: 0.55; filter: grayscale(0.4) brightness(1.1) blur(0.4px); }
+.dcell.is-frozen .wild-count { display: none !important; } /* 凍結中はワイルド残数を隠す */
+/* 氷の表面：白い反射のスジ＋霜の縁 */
+.dcell.is-frozen::after {
   content: "";
   position: absolute;
   inset: 0;
-  margin: auto;
-  width: 14%;
-  height: 14%;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: inherit;
   pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, transparent 30%),
+    linear-gradient(300deg, rgba(255, 255, 255, 0.25) 0%, transparent 35%);
+  box-shadow: inset 0 0 0 2px rgba(220, 240, 255, 0.4);
+}
+/* 溶ける瞬間の演出 */
+.dcell.melting::after { animation: iceMelt 0.5s ease forwards; }
+@keyframes iceMelt {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.15); }
 }
 
 /* スロット右側に縦並びのオッズ表（左端揃え） */

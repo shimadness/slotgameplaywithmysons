@@ -203,14 +203,14 @@ export class DropBoard {
   }
 
   // --- セル描画 ------------------------------------------------------
-  private paintCell(c: number, r: number, id: DSym, fromOffsetPx?: number, wildLeft = 0): void {
+  private paintCell(c: number, r: number, id: DSym, fromOffsetPx?: number, wildLeft = 0, frozen = false): void {
     const d = dsym(id);
     const cell = this.cells[c][r];
     const glyph = this.glyphs[c][r];
     cell.dataset.sym = id;
-    cell.classList.remove("match", "clearing");
-    cell.classList.toggle("wild5", wildLeft > 0);
-    cell.classList.toggle("is-blank", id === "blank");
+    cell.classList.remove("match", "clearing", "melting");
+    cell.classList.toggle("wild5", wildLeft > 0 && !frozen);
+    cell.classList.toggle("is-frozen", frozen);
     cell.classList.toggle("is-text", id === "bar" || id === "bar2" || id === "bar3" || id === "blue7" || id === "red7" || id === "gold7");
     cell.style.setProperty("--sym-color", d.color);
     glyph.textContent = d.glyph;
@@ -254,20 +254,20 @@ export class DropBoard {
       this.cells[c][r].dataset.sym = id;
       this.cells[c][r].style.setProperty("--sym-color", d.color);
       this.glyphs[c][r].textContent = d.glyph;
-      this.cells[c][r].classList.toggle("is-blank", id === "blank");
       this.cells[c][r].classList.toggle("is-text", id === "bar" || id === "bar2" || id === "bar3" || id === "blue7" || id === "red7" || id === "gold7");
+      this.cells[c][r].classList.remove("is-frozen");
       this.setBadge(this.badges[c][r], 0);
       this.cells[c][r].classList.remove("wild5");
     }
     this.applyBlur(c, blur);
   }
 
-  setGrid(grid: DGrid, from?: number[][], wild?: number[][]): void {
+  setGrid(grid: DGrid, from?: number[][], wild?: number[][], frozen?: boolean[][]): void {
     this.clearRoads();
     for (let c = 0; c < COLS; c++)
       for (let r = 0; r < ROWS; r++) {
         const off = from ? (from[c][r] - r) * this.pitch() : undefined;
-        this.paintCell(c, r, grid[c][r], off, wild ? wild[c][r] : 0);
+        this.paintCell(c, r, grid[c][r], off, wild ? wild[c][r] : 0, frozen ? frozen[c][r] : false);
       }
   }
 
@@ -283,7 +283,6 @@ export class DropBoard {
         cell.style.setProperty("--sym-color", d.color);
         glyph.textContent = d.glyph;
         cell.classList.toggle("wild5", id === "wild");
-        cell.classList.toggle("is-blank", id === "blank");
         cell.classList.toggle("is-text", id === "bar" || id === "bar2" || id === "bar3" || id === "blue7" || id === "red7" || id === "gold7");
         this.setBadge(this.previewBadges[c][idx], id === "wild" ? WILD_USES : 0);
         if (animate && changed) {
@@ -299,7 +298,7 @@ export class DropBoard {
   }
 
   // --- 回転（スピンイン） --------------------------------------------
-  private spinIn(initial: DGrid, initialWild: number[][], cb: DropCallbacks): Promise<void> {
+  private spinIn(initial: DGrid, initialWild: number[][], initialFrozen: boolean[][], cb: DropCallbacks): Promise<void> {
     const start = performance.now();
     const dur = (c: number) => 620 + c * 240;
     const stopped = [false, false, false];
@@ -312,7 +311,7 @@ export class DropBoard {
           const p = (t - start) / dur(c);
           if (p >= 1) {
             stopped[c] = true;
-            for (let r = 0; r < ROWS; r++) this.paintCell(c, r, initial[c][r], undefined, initialWild[c][r]);
+            for (let r = 0; r < ROWS; r++) this.paintCell(c, r, initial[c][r], undefined, initialWild[c][r], initialFrozen[c][r]);
             cb.onReelStop?.(c);
           } else {
             all = false;
@@ -361,17 +360,19 @@ export class DropBoard {
   async run(result: DropResult, cb: DropCallbacks = {}): Promise<void> {
     this.setOdds(result.oddsStart);
     this.renderPreview(result.initialPreview);
-    await this.spinIn(result.initial, result.initialWild, cb);
+    await this.spinIn(result.initial, result.initialWild, result.initialFrozen, cb);
     await wait(220);
 
     for (const step of result.steps) {
       this.highlight(step);
+      // 隣接の役で溶ける氷をパキッと演出
+      for (const [c, r] of step.melted) this.cells[c][r].classList.add("melting");
       cb.onStep?.(step);
       await wait(560);
       this.setOdds(step.oddsAfter); // 上昇ぶんがだるま落とし風にロール
       this.markClearing(step);
       await wait(300);
-      this.setGrid(step.gridAfter, step.from, step.wildAfter);
+      this.setGrid(step.gridAfter, step.from, step.wildAfter, step.frozenAfter);
       this.renderPreview(step.previewAfter, true);
       await wait(MAX_DROP_MS + 120);
     }
