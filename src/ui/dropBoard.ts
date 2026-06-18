@@ -110,27 +110,49 @@ export class DropBoard {
       const g = document.createElement("span");
       g.className = "odds-glyph glyph";
       g.textContent = dsym(id).glyph;
+      // クリップ窓＋縦ロール（だるま落とし風に ×N が上から降って入れ替わる）
       const v = document.createElement("span");
       v.className = "odds-val";
-      v.textContent = "×" + dsym(id).lineOdds;
+      const track = document.createElement("span");
+      track.className = "odds-roll";
+      track.textContent = "×" + dsym(id).lineOdds;
+      track.dataset.v = track.textContent;
+      v.appendChild(track);
       row.appendChild(g);
       row.appendChild(v);
       panel.appendChild(row);
-      this.oddsRows[id] = v;
+      this.oddsRows[id] = track;
     }
     return panel;
   }
-  /** odds は dropEngine の oddsAfter（シンボル→階段インデックス） */
-  setOdds(odds: Record<string, number>, flash?: Set<string>): void {
+  /** odds は dropEngine の oddsAfter（シンボル→階段インデックス）。上昇時はだるま落とし風ロール。 */
+  setOdds(odds: Record<string, number>): void {
     for (const id of BASE_SYMS) {
       const idx = odds[id] ?? 0;
-      const el = this.oddsRows[id];
-      if (!el) continue;
-      el.textContent = "×" + ODDS_LADDER[idx];
-      if (flash?.has(id)) {
-        el.parentElement?.classList.remove("up");
-        void el.parentElement?.offsetWidth; // reflow でアニメ再start
-        el.parentElement?.classList.add("up");
+      const track = this.oddsRows[id];
+      if (!track) continue;
+      const newNum = ODDS_LADDER[idx];
+      const newText = "×" + newNum;
+      const cur = track.dataset.v || track.textContent;
+      if (cur === newText) continue;
+      const oldNum = parseInt((cur || "×0").slice(1)) || 0;
+      const row = track.closest(".odds-row") as HTMLElement | null;
+      if (newNum > oldNum) {
+        // 新しい×Nを上に積み、旧を下に。track を下げて新を窓に降ろす＝上から降ってくる演出。
+        track.innerHTML =
+          `<span class="roll-line">${newText}</span><span class="roll-line">${cur}</span>`;
+        track.animate(
+          [{ transform: "translateY(-50%)" }, { transform: "translateY(0)" }],
+          { duration: 380, easing: "cubic-bezier(0.34,1.5,0.5,1)" }
+        );
+        row?.classList.remove("up");
+        void row?.offsetWidth;
+        row?.classList.add("up");
+        const settle = newText;
+        setTimeout(() => { track.textContent = settle; track.dataset.v = settle; }, 370);
+      } else {
+        track.textContent = newText;
+        track.dataset.v = newText;
       }
     }
   }
@@ -345,13 +367,8 @@ export class DropBoard {
     for (const step of result.steps) {
       this.highlight(step);
       cb.onStep?.(step);
-      // オッズ上昇したシンボルをフラッシュ
-      const flash = new Set(step.lineWins.map((w) => {
-        // そのシンボル以上が上がるが、簡易に当該シンボルだけ光らせる
-        return w.symbol;
-      }));
       await wait(560);
-      this.setOdds(step.oddsAfter, flash);
+      this.setOdds(step.oddsAfter); // 上昇ぶんがだるま落とし風にロール
       this.markClearing(step);
       await wait(300);
       this.setGrid(step.gridAfter, step.from, step.wildAfter);
