@@ -10,12 +10,14 @@ import {
   type Grid,
   type SpinEvaluation,
 } from "./game/paylines";
-import { play as dropPlay, DSYMBOLS } from "./game/dropEngine";
+import { play as dropPlay, DSYMBOLS, BASE_SYMS, type DSym } from "./game/dropEngine";
+import { DU_LADDER, SPECIAL_BONUS, UPPER_CAP, duGlyph, duColor } from "./game/doubleup";
 import { Sfx } from "./audio/sfx";
 import { Board } from "./ui/board";
 import { DropBoard } from "./ui/dropBoard";
 import { Effects } from "./ui/effects";
 import { Hud } from "./ui/hud";
+import { DoubleUp } from "./ui/doubleup";
 import { ALL_SYMBOL_IDS, sym, type SymbolId } from "./game/symbols";
 
 type Mode = "drop" | "slot";
@@ -58,6 +60,24 @@ machine.appendChild(board.el);
 board.el.classList.add("hidden");
 
 const effects = new Effects(machine, board);
+const doubleUp = new DoubleUp(sfx);
+app.appendChild(doubleUp.el);
+
+// 勝利の精算。通常時はダブルアップに移行（最終額を addWin）。
+// オートプレイ／RUSH中は自動 COLLECT（ダブルアップをスキップ）。
+async function resolveWin(win: number): Promise<void> {
+  if (win <= 0) return;
+  if (autoPlay || state.inRush) {
+    state.addWin(win);
+    hud.animateWin(win);
+    return;
+  }
+  busy = true; // ダブルアップ中はスピン禁止
+  const final = await doubleUp.start(win, state.bet);
+  state.addWin(final);
+  hud.animateWin(final);
+  hud.update();
+}
 
 let playerOverlay: HTMLElement;
 let mode: Mode = "drop";
@@ -103,6 +123,20 @@ const hud = new Hud(state, {
     sfx.resume();
     sfx.ui();
     state.setMaxBet();
+    hud.update();
+  },
+  onAddBet: (n) => {
+    if (busy || state.inRush) return;
+    sfx.resume();
+    sfx.ui();
+    state.addBet(n);
+    hud.update();
+  },
+  onClearBet: () => {
+    if (busy || state.inRush) return;
+    sfx.resume();
+    sfx.ui();
+    state.clearBet();
     hud.update();
   },
   onToggleMute: () => {
@@ -195,7 +229,7 @@ async function playDrop(): Promise<void> {
   state.placeBet();
   hud.update();
 
-  const result = dropPlay(state.lineBet); // 本家準拠エンジン（固定配当・1BET）
+  const result = dropPlay(state.bet); // 本家準拠エンジン（固定配当・dropBet 倍率）
 
   sfx.startSpin();
 
@@ -232,9 +266,9 @@ async function playDrop(): Promise<void> {
     effects.popWin(result.totalWin, big);
     if (big) sfx.winBig();
     else sfx.winSmall();
-    state.addWin(result.totalWin);
-    hud.animateWin(result.totalWin);
-    await wait(big ? 1200 : 650);
+    await wait(big ? 900 : 500);
+    await resolveWin(result.totalWin); // ダブルアップ → addWin
+    await wait(300);
   } else {
     await wait(200);
   }
@@ -332,10 +366,10 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
     effects.popWin(ev.total, big);
     if (big) sfx.winBig();
     else sfx.winSmall();
-    state.addWin(ev.total);
     if (state.inRush) rushWinTotal += ev.total;
-    hud.animateWin(ev.total);
-    await wait(big ? 1400 : 850);
+    await wait(big ? 1000 : 600);
+    await resolveWin(ev.total); // ダブルアップ → addWin（RUSH中は自動collect）
+    await wait(300);
   } else {
     await wait(250);
   }
@@ -442,16 +476,41 @@ function escapeHtml(s: string): string {
 
 // ---- 配当表 --------------------------------------------------------
 function buildPaytable(): void {
+  // DROP シンボルの日本語名（配当表表示用）
+  const DROP_NAMES: Record<DSym, string> = {
+    cherry: "チェリー", orange: "オレンジ", plum: "プラム", banana: "バナナ",
+    melon: "メロン", bell: "ベル", bar: "BAR", bar2: "BAR²", bar3: "BAR³",
+    blue7: "青7", red7: "赤7", gold7: "GOLD7", wild: "ワイルド5",
+  };
+
   const overlay = document.createElement("div");
   overlay.className = "paytable-overlay hidden";
-  const rows = ALL_SYMBOL_IDS.map((id) => {
+
+  // ① DROP ラインオッズ開始値（役成立でこのシンボル以上が1段ずつ上昇）
+  const oddsRows = [...BASE_SYMS, "gold7" as DSym].map((id) => {
+    const d = DSYMBOLS[id];
+    const fixed = id === "gold7";
+    return `<tr>
+      <td class="pt-glyph" style="color:${d.color}">${d.glyph}</td>
+      <td class="pt-name">${DROP_NAMES[id]}</td>
+      <td class="pt-pay">×${d.lineOdds}${fixed ? "" : "〜"}</td>
+      <td class="pt-note">${fixed ? "固定・激レア" : ""}</td>
+    </tr>`;
+  }).join("");
+
+  // ② コンボ（連鎖）倍率
+  const combo = [
+    ["4連鎖", "×1"], ["5", "×2"], ["6", "×4"], ["7", "×8"], ["8", "×16"],
+    ["9", "×32"], ["10", "×64"], ["11", "×128"], ["12", "×256"],
+    ["13", "×512"], ["14〜30", "×1024"],
+  ].map(([c, m]) => `<span class="pt-chip">${c} <b>${m}</b></span>`).join("");
+
+  // ③ 5リール配当（3/4/5個揃い）
+  const reelRows = ALL_SYMBOL_IDS.map((id) => {
     const d = sym(id);
     const note =
-      id === "wild"
-        ? "ワイルドファイブ：代用ワイルド。DROPは消えずに最大5回使えて落下"
-        : id === "scatter"
-        ? "5リール: 3個以上でRUSH（総BET倍率）"
-        : "";
+      id === "wild" ? "代用ワイルド"
+      : id === "scatter" ? "3個以上でRUSH" : "";
     return `<tr>
       <td class="pt-glyph" style="color:${d.color}">${d.glyph}</td>
       <td class="pt-name">${d.name}</td>
@@ -459,16 +518,44 @@ function buildPaytable(): void {
       <td class="pt-note">${note}</td>
     </tr>`;
   }).join("");
+
+  // ④ ダブルアップ：スペシャルボーナス（3つ揃い）
+  const duBonus = [...DU_LADDER].reverse().map((s) =>
+    `<span class="pt-chip"><b style="color:${duColor(s)}">${duGlyph(s)}×3</b> ×${SPECIAL_BONUS[s]}</span>`
+  ).join("");
+
   overlay.innerHTML = `
     <div class="paytable">
       <h2>遊び方 &amp; 配当表</h2>
+
+      <h3 class="pt-h">① 3×3 DROP</h3>
       <div class="pt-modes">
-        <p><b>3×3 DROP</b>：同じシンボルが<b>タテ・ヨコ・ナナメ（道）</b>で3つ以上つながると配当→消えて上から落下（ドロップ）→再判定で<b>連鎖</b>。連鎖が伸びるほど倍率UP、6連鎖以上で<b>RUSH</b>突入。</p>
-        <p><b>5リール</b>：左から連続で揃うと配当（10ライン）。スキャッター🌟3つ以上でRUSH。</p>
-        <p class="pt-rtp">ヘッダーの<b>「設定」</b>でペイアウト率を 1（90%）〜6（97%）に変更できます。</p>
+        <p>同じシンボルが<b>タテ・ヨコ・ナナメ（道）</b>で3つ以上つながると消えて、上から落下→再判定で<b>連鎖</b>。配当は次の<b>3系統の合計</b>です。</p>
+        <p><b>1. ラインペイ</b>：有効<b>8ライン</b>（縦3・横3・斜め2）。揃うと <b>BET×オッズ</b>。役が出るたび<b>そのシンボル以上のオッズが1段アップ</b>（次スピンでリセット）。</p>
+        <p><b>2. コネクトボーナス</b>：同じシンボルが<b>3個以上隣接</b>（ライン外もOK）。<b>個数×シンボル</b>が多い/強いほど高配当（例：赤7 5個＝×100、9個＝×8000）。</p>
+        <p><b>3. コンボボーナス</b>：<b>4連鎖以上</b>で連鎖倍率を加算。</p>
+        <p><span class="pt-ice">🧊 氷</span>：凍ったマスは役に使えませんが、<b>となりで役が成立すると溶けて</b>連鎖がのびます。<span style="color:${DSYMBOLS.wild.color}">✨ ワイルド5</span>：全シンボルの代用。消えずに<b>最大5回</b>使えて落下します。</p>
       </div>
-      <table>${rows}</table>
-      <p class="pt-foot">配当倍率は 3個 / 4個 / 5個揃い（ラインBET倍率）。DROPはクラスターサイズ×連鎖倍率×設定で決まります。</p>
+      <p class="pt-sub">ラインオッズ開始値（このシンボル以上が階段を上昇）</p>
+      <table>${oddsRows}</table>
+      <p class="pt-sub">コンボ倍率</p>
+      <div class="pt-chips">${combo}</div>
+
+      <h3 class="pt-h">② 5リール</h3>
+      <div class="pt-modes">
+        <p>左から連続で揃うと配当（<b>10ライン</b>）。スキャッター🌟<b>3個以上でRUSH</b>（フリースピン）。</p>
+      </div>
+      <table>${reelRows}</table>
+
+      <h3 class="pt-h">③ ダブルアップ（両モード共通）</h3>
+      <div class="pt-modes">
+        <p>WIN後に挑戦できます。ディーラーの目より<b>強い目を3つの中から当てれば配当2倍</b>。<b>COLLECT</b>（降りる）／<b>半分かける</b>（残りはSAVEで確保）／<b>全部かける</b>から選べます（価値1のときは半分不可）。</p>
+        <p>3つすべて同じ目が出ると<b>スペシャルボーナス</b>で強制終了。価値が <b>${UPPER_CAP.toLocaleString()}</b> を超えると強制COLLECT。</p>
+      </div>
+      <p class="pt-sub">スペシャルボーナス（BET倍率）</p>
+      <div class="pt-chips">${duBonus}</div>
+
+      <p class="pt-foot">配当はすべて1BET（全ライン有効）。倍率はBET1枚あたりの値です。</p>
       <button class="btn primary" data-close>閉じる</button>
     </div>`;
   app.appendChild(overlay);

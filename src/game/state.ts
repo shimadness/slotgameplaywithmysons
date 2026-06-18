@@ -5,6 +5,10 @@ import { DEFAULT_SETTEI, SETTEI_RTP } from "./drop";
 export const LINE_BETS = [1, 2, 3, 5, 10] as const;
 export type LineBet = (typeof LINE_BETS)[number];
 
+// DROP モードのベット（1BET/10BET/100BET で増減・上限500の単一ベット）
+export const DROP_BET_MIN = 1;
+export const DROP_BET_MAX = 500;
+
 // --- プレイヤー（3人分の別々のセーブ）-------------------------------
 export const PLAYER_IDS = ["p1", "p2", "p3"] as const;
 export type PlayerId = (typeof PLAYER_IDS)[number];
@@ -22,6 +26,7 @@ interface PlayerSave {
   credits: number;
   lineBetIndex: number;
   settei: number;
+  dropBet: number;
 }
 interface MetaSave {
   names: Record<PlayerId, string>;
@@ -54,7 +59,8 @@ export class GameState {
   // 現在のプレイヤーの状態
   playerId: PlayerId = "p1";
   credits = START_CREDITS;
-  lineBetIndex = 0; // LINE_BETS のインデックス
+  lineBetIndex = 0; // LINE_BETS のインデックス（5リール用）
+  dropBet = DROP_BET_MIN; // DROPモードの単一ベット（1〜500）
   settei = DEFAULT_SETTEI; // （旧）ペイアウト率設定。DROPは固定配当化で未使用、5リール用に残置
   /** 現在モード。ベット構造が変わる（drop=1BET単一 / slot=10ライン）。 */
   mode: "drop" | "slot" = "drop";
@@ -131,10 +137,15 @@ export class GameState {
     return LINE_BETS[this.lineBetIndex];
   }
 
+  /** そのモードの配当倍率に使う「BET」単位（DROP=dropBet / 5リール=lineBet）。 */
+  get bet(): number {
+    return this.mode === "drop" ? this.dropBet : this.lineBet;
+  }
+
   get totalBet(): number {
-    // DROPは「1BET=全ライン有効」なのでライン係数を掛けない単一ベット。
+    // DROPは「1BET=全ライン有効」の単一ベット（dropBet そのもの）。
     // 5リールは10ラインなので従来どおり lineBet × LINE_COUNT。
-    return this.mode === "drop" ? this.lineBet : this.lineBet * LINE_COUNT;
+    return this.mode === "drop" ? this.dropBet : this.lineBet * LINE_COUNT;
   }
 
   cycleLineBet(): void {
@@ -144,6 +155,18 @@ export class GameState {
 
   setMaxBet(): void {
     this.lineBetIndex = LINE_BETS.length - 1;
+    this.save();
+  }
+
+  /** DROPベットを n だけ増やす（上限500でクランプ）。 */
+  addBet(n: number): void {
+    this.dropBet = Math.min(DROP_BET_MAX, Math.max(DROP_BET_MIN, this.dropBet + n));
+    this.save();
+  }
+
+  /** DROPベットを最小（1）に戻す。 */
+  clearBet(): void {
+    this.dropBet = DROP_BET_MIN;
     this.save();
   }
 
@@ -214,6 +237,7 @@ export class GameState {
       credits: this.credits,
       lineBetIndex: this.lineBetIndex,
       settei: this.settei,
+      dropBet: this.dropBet,
     };
     writeJSON(SAVE_PREFIX + this.playerId, data);
   }
@@ -234,5 +258,9 @@ export class GameState {
       typeof s?.settei === "number"
         ? Math.min(6, Math.max(1, Math.round(s.settei)))
         : DEFAULT_SETTEI;
+    this.dropBet =
+      typeof s?.dropBet === "number"
+        ? Math.min(DROP_BET_MAX, Math.max(DROP_BET_MIN, Math.round(s.dropBet)))
+        : DROP_BET_MIN;
   }
 }

@@ -727,10 +727,23 @@ body::before {
 .meter.free { border-color: rgba(255, 92, 122, 0.5); }
 
 .controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr 2fr auto auto auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: 10px;
 }
+.bet-group {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+.bet-group .btn { flex: 1; }
+.bet-group.drop .btn { flex-direction: column; gap: 1px; padding: 8px 6px; }
+.bet-group.drop .btn small { font-size: 10px; font-weight: 700; opacity: 0.75; }
+.controls > [data-spin-btn] { flex: 2 1 130px; }
+.controls > [data-auto-btn] { flex: 0 1 auto; }
+.controls > [data-mute-btn],
+.controls > [data-refill-btn] { flex: 0 0 auto; }
 .btn {
   border: 1px solid var(--panel-border);
   background: linear-gradient(180deg, #2a2a55, #1a1a3a);
@@ -866,6 +879,25 @@ body::before {
 .pt-pay { font-variant-numeric: tabular-nums; color: var(--gold); white-space: nowrap; }
 .pt-note { font-size: 11px; opacity: 0.7; }
 .pt-foot { font-size: 12px; opacity: 0.7; margin: 14px 0; }
+.pt-h {
+  margin: 20px 0 8px;
+  font-size: 16px;
+  color: var(--neon);
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 4px;
+}
+.pt-sub { font-size: 12px; opacity: 0.75; margin: 12px 0 6px; }
+.pt-ice { color: #9fdcff; font-weight: 800; }
+.pt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pt-chip {
+  font-size: 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.pt-chip b { color: var(--gold); }
 
 /* ===== RUSH 中の専用背景演出 ===== */
 .rush-rays {
@@ -968,10 +1000,233 @@ body.rush-active .title h1 {
   .meter-label { font-size: 9px; letter-spacing: 0; }
   .meter-val { font-size: 16px; }
 
-  /* 操作ボタンを2列・低めにしてSPINを横いっぱい */
+  /* 操作ボタンを低めに。ベット群とSPINで折り返す */
   .hud { margin-top: 10px; }
-  .controls { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .btn.primary { grid-column: span 2; }
+  .controls { gap: 8px; }
+  .bet-group { flex: 1 1 100%; }
+  .controls > [data-spin-btn] { flex: 1 1 100%; }
   .btn { padding: 11px 8px; font-size: 14px; }
   .btn.primary { font-size: 18px; }
+}
+
+/* ===== ダブルアップ（DOUBLE UP CHALLENGE）====================== */
+.du-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: radial-gradient(ellipse at 50% 30%, rgba(20, 30, 70, 0.85), rgba(4, 6, 18, 0.94));
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+.du-panel {
+  width: min(560px, 100%);
+  border: 2px solid var(--gold);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #10173a, #070a1e);
+  box-shadow: 0 0 40px rgba(255, 210, 74, 0.35), inset 0 0 24px rgba(79, 195, 255, 0.12);
+  padding: 16px 16px 18px;
+}
+.du-title {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  background: linear-gradient(90deg, var(--gold), #fff, var(--neon), var(--gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 18px rgba(255, 210, 74, 0.4);
+}
+.du-title span { font-size: 18px; }
+
+.du-meters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.du-meter {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.du-meter label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #9fb0d0;
+}
+.du-meter b {
+  display: block;
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+}
+.du-meter.next b { color: var(--neon); }
+.du-meter.save b { color: var(--gold); }
+
+.du-stage {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "dealer bonus" "reels bonus";
+  gap: 12px;
+  align-items: start;
+}
+.du-dealer { grid-area: dealer; text-align: center; }
+.du-reels { grid-area: reels; }
+.du-bonus { grid-area: bonus; }
+
+.du-label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #9fb0d0;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.du-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 35%, #1d2752, #0a1030);
+  border: 1px solid var(--panel-border);
+  font-size: 34px;
+  font-weight: 900;
+}
+.du-cell.dealer {
+  width: 76px;
+  height: 76px;
+  border-color: var(--pink);
+  box-shadow: 0 0 18px rgba(255, 92, 122, 0.4);
+}
+
+.du-gauge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: #9fb0d0;
+}
+.du-gauge-bar {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #2a6, #fc4, #f55);
+  overflow: hidden;
+}
+.du-gauge-bar i {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 14px;
+  background: #fff;
+  box-shadow: 0 0 6px #fff;
+  transform: translateX(-50%);
+  transition: width 0.3s ease;
+}
+
+.du-reel-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+.du-reel { display: flex; flex-direction: column; gap: 6px; }
+.du-reel .du-cell { transition: transform 0.15s ease, box-shadow 0.2s ease; }
+.du-reel.pickable .du-cell {
+  cursor: pointer;
+  border-color: var(--neon);
+  animation: duPick 0.9s ease-in-out infinite alternate;
+}
+.du-reel.pickable .du-cell:hover { transform: translateY(-3px); }
+@keyframes duPick {
+  from { box-shadow: 0 0 6px rgba(79, 195, 255, 0.4); }
+  to { box-shadow: 0 0 18px rgba(79, 195, 255, 0.9); }
+}
+.du-reel.win .du-cell {
+  border-color: var(--gold);
+  box-shadow: 0 0 22px var(--gold);
+}
+.du-reel.lose .du-cell { opacity: 0.45; }
+.du-select {
+  padding: 6px 4px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.du-bonus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  max-height: 170px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.du-bonus-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.du-bonus-sym { font-weight: 800; }
+.du-bonus-pay { color: var(--gold); font-weight: 800; }
+
+.du-msg {
+  min-height: 22px;
+  margin: 12px 0 4px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--gold);
+  text-shadow: 0 0 10px rgba(255, 210, 74, 0.4);
+}
+
+.du-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.du-actions .btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+}
+.du-actions .btn small {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+.du-collect { background: linear-gradient(180deg, #3a3a5e, #22223e); }
+.du-half { background: linear-gradient(180deg, #2a6, #184); color: #eafff0; }
+
+@media (max-width: 560px) {
+  .du-panel { padding: 12px; }
+  .du-title { font-size: 22px; }
+  .du-stage {
+    grid-template-columns: 1fr;
+    grid-template-areas: "dealer" "reels" "bonus";
+  }
+  .du-bonus-list { flex-flow: row wrap; max-height: none; justify-content: center; }
+  .du-bonus-row { flex: 0 0 auto; }
+  .du-meter b { font-size: 18px; }
+  .du-cell { width: 56px; height: 56px; font-size: 28px; }
+  .du-cell.dealer { width: 66px; height: 66px; }
 }
