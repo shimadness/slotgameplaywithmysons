@@ -269,14 +269,16 @@ export class DropBoard {
         this.setBadge(this.previewBadges[c][idx], id === "wild" ? WILD_USES : 0);
         // 新しい予備が「上から予備枠へ」落ちてくる（急に現れない）
         if (animate && changed) {
-          glyph.animate(
-            [
-              { transform: `translateY(${-this.pitch()}px)`, opacity: "0.3",
-                easing: "cubic-bezier(0.45, 0, 0.85, 0.6)" },
-              { transform: "translateY(0px)", opacity: "1" },
-            ],
-            { duration: FALL_BASE_MS + 40, fill: "backwards" }
-          );
+          const drop = [
+            { transform: `translateY(${-this.pitch()}px)`, opacity: "0.3",
+              easing: "cubic-bezier(0.45, 0, 0.85, 0.6)" },
+            { transform: "translateY(0px)", opacity: "1" },
+          ];
+          const opts = { duration: FALL_BASE_MS + 40, fill: "backwards" as const };
+          glyph.animate(drop, opts);
+          // ワイルドの「5」バッジも絶対配置なので、グリフと同じ落下で追従させる。
+          // （追従させないと ✨ が落ちてくる前にバッジだけ NEXT 枠へ先出しされる）
+          if (id === "wild") this.previewBadges[c][idx].animate(drop, opts);
         }
       }
   }
