@@ -10,13 +10,7 @@ import {
   type Grid,
   type SpinEvaluation,
 } from "./game/paylines";
-import {
-  play as dropPlay,
-  payoutScaleFor,
-  RUSH_MULTIPLIER,
-  RUSH_PLAYS,
-  RUSH_MAX_SPINS,
-} from "./game/drop";
+import { play as dropPlay, DSYMBOLS } from "./game/dropEngine";
 import { Sfx } from "./audio/sfx";
 import { Board } from "./ui/board";
 import { DropBoard } from "./ui/dropBoard";
@@ -44,9 +38,6 @@ app.innerHTML = `
           <button class="mode-btn active" data-mode="drop">3×3 DROP</button>
           <button class="mode-btn" data-mode="slot">5リール</button>
         </div>
-        <button class="settei-btn" data-settei title="ペイアウト率の設定（1〜6）">
-          設定 <b data-settei-n>4</b><small data-settei-rtp>95%</small>
-        </button>
         <button class="paytable-btn" data-help>配当表</button>
       </div>
     </header>
@@ -143,31 +134,18 @@ app.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {
     sfx.resume();
     sfx.ui();
     mode = next;
+    state.mode = next; // ベット構造（単一 or 10ライン）を切替
     app.querySelectorAll(".mode-btn").forEach((b) =>
       b.classList.toggle("active", b === btn)
     );
     board.el.classList.toggle("hidden", mode !== "slot");
     dropBoard.el.classList.toggle("hidden", mode !== "drop");
+    hud.update(); // TOTAL BET 表示を更新
   });
 });
 
 // ---- 設定（ペイアウト率 1〜6）切替 ----------------------------------
-const setteiBtn = app.querySelector("[data-settei]") as HTMLButtonElement;
-const setteiNEl = app.querySelector("[data-settei-n]") as HTMLElement;
-const setteiRtpEl = app.querySelector("[data-settei-rtp]") as HTMLElement;
-function updateSetteiLabel(): void {
-  setteiNEl.textContent = String(state.settei);
-  setteiRtpEl.textContent = `${Math.round(state.targetRtp * 100)}%`;
-}
-updateSetteiLabel();
-setteiBtn.addEventListener("click", () => {
-  if (busy || state.inRush || autoPlay) return;
-  sfx.resume();
-  sfx.ui();
-  state.setSettei((state.settei % 6) + 1); // 1→2→…→6→1 と循環
-  updateSetteiLabel();
-  void effects.banner(`設定 ${state.settei}（払出 ${Math.round(state.targetRtp * 100)}%）`, 1100);
-});
+// 設定（ペイアウト率）は廃止 — DROPは本家準拠の固定配当。
 
 // ---- プレイヤー（3人別々のクレジット）------------------------------
 const playerNameEl = app.querySelector("[data-player-name]") as HTMLElement;
@@ -217,8 +195,7 @@ async function playDrop(): Promise<void> {
   state.placeBet();
   hud.update();
 
-  const rushMult = state.inRush ? state.rushMultiplier : 1;
-  const result = dropPlay(state.lineBet, rushMult, payoutScaleFor(state.settei));
+  const result = dropPlay(state.lineBet); // 本家準拠エンジン（固定配当・1BET）
 
   sfx.startSpin();
 
@@ -231,59 +208,46 @@ async function playDrop(): Promise<void> {
       running += step.stepWin;
       state.lastWin = running;
       hud.update();
-      effects.burst(
-        Math.min(10 + step.chain * 8, 60),
-        [...step.clusters.map((c) => sym(c.symbol).color), "#fff"]
-      );
-      if (step.chain >= 2 && step.stepWin > 0) {
-        effects.popChain(step.chain, step.stepWin);
-      }
+      const colors = [
+        ...step.lineWins.map((w) => dropSymColor(w.symbol)),
+        ...step.connectWins.map((w) => dropSymColor(w.symbol)),
+        "#fff",
+      ];
+      effects.burst(Math.min(10 + step.chain * 8, 60), colors);
+      if (step.chain >= 2 && step.stepWin > 0) effects.popChain(step.chain, step.stepWin);
     },
   });
 
+  // コンボボーナス（連鎖終了時に1回）
+  if (result.comboPay > 0) {
+    running += result.comboPay;
+    state.lastWin = running;
+    hud.update();
+    sfx.bonus();
+    await effects.banner(`コンボ ${result.maxChain}連鎖  ×${result.comboMult}  +${result.comboPay}`, 1300);
+  }
+
   if (result.totalWin > 0) {
-    const big = result.totalWin >= state.totalBet * 15 || result.maxChain >= 4;
+    const big = result.totalWin >= state.totalBet * 30 || result.maxChain >= 5;
     effects.popWin(result.totalWin, big);
     if (big) sfx.winBig();
     else sfx.winSmall();
     state.addWin(result.totalWin);
-    if (state.inRush) rushWinTotal += result.totalWin;
     hud.animateWin(result.totalWin);
     await wait(big ? 1200 : 650);
   } else {
     await wait(200);
   }
 
-  // 連鎖で RUSH 突入 / 上乗せ
-  if (result.triggeredRush) {
-    if (state.inRush) {
-      // 上乗せは1RUSHの総スピン上限まで（暴走＝出すぎ防止）
-      const room = RUSH_MAX_SPINS - state.freeSpinsTotal;
-      if (room > 0) {
-        const add = Math.min(RUSH_PLAYS, room);
-        state.retriggerRush(add);
-        sfx.bonus();
-        await effects.banner(`RUSH 上乗せ +${add}`, 1500);
-      }
-    } else {
-      rushWinTotal = 0;
-      state.startRush(RUSH_PLAYS, RUSH_MULTIPLIER);
-      enterRushFx();
-      sfx.bonus();
-      await effects.rushBanner(RUSH_PLAYS, RUSH_MULTIPLIER);
-    }
-    hud.update();
-  }
-
   busy = false;
   hud.setBusy(false);
   hud.update();
+  maybeAutoNext();
+}
 
-  if (state.inRush) {
-    if (state.freeSpins > 0) setTimeout(() => void play(), 1000);
-    else await finishRush();
-  }
-  if (!state.inRush) maybeAutoNext();
+/** dropEngine シンボルの色（effects 用） */
+function dropSymColor(id: import("./game/dropEngine").DSym): string {
+  return DSYMBOLS[id].color;
 }
 
 // ===================================================================
@@ -456,7 +420,6 @@ function renderPlayerList(): void {
       sfx.ui();
       state.switchPlayer(btn.dataset.play as PlayerId);
       updatePlayerName();
-      updateSetteiLabel();
       hud.update();
       closePlayerPicker();
     });

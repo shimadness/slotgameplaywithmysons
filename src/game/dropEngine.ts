@@ -255,7 +255,7 @@ function findConnects(g: DGrid): ConnectWin[] {
 }
 
 // ---- 落下＆補充（旧版踏襲） ---------------------------------------
-const PREVIEW_ROWS = 1;
+export const PREVIEW_ROWS = 1;
 function collapse(
   g: DGrid, ch: number[][], cleared: Array<[number, number]>, streams: DSym[][]
 ): { grid: DGrid; charges: number[][]; from: number[][] } {

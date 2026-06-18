@@ -55,7 +55,9 @@ export class GameState {
   playerId: PlayerId = "p1";
   credits = START_CREDITS;
   lineBetIndex = 0; // LINE_BETS のインデックス
-  settei = DEFAULT_SETTEI; // ペイアウト率の設定（1〜6）
+  settei = DEFAULT_SETTEI; // （旧）ペイアウト率設定。DROPは固定配当化で未使用、5リール用に残置
+  /** 現在モード。ベット構造が変わる（drop=1BET単一 / slot=10ライン）。 */
+  mode: "drop" | "slot" = "drop";
 
   // 名前（3人分。プレイヤーごとに保存）
   names: Record<PlayerId, string> = { ...DEFAULT_NAMES };
@@ -130,7 +132,9 @@ export class GameState {
   }
 
   get totalBet(): number {
-    return this.lineBet * LINE_COUNT;
+    // DROPは「1BET=全ライン有効」なのでライン係数を掛けない単一ベット。
+    // 5リールは10ラインなので従来どおり lineBet × LINE_COUNT。
+    return this.mode === "drop" ? this.lineBet : this.lineBet * LINE_COUNT;
   }
 
   cycleLineBet(): void {

@@ -297,6 +297,50 @@ body::before {
   filter: drop-shadow(0 0 8px var(--sym-color));
   will-change: transform;
 }
+/* BAR / 7 などテキスト系シンボルは文字なので小さめ＋色付け */
+.dcell.is-text .glyph,
+.ptube-cell.is-text .glyph {
+  font-size: calc(var(--dcell) * 0.34);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -1px;
+  color: var(--sym-color);
+  text-shadow: 0 0 8px var(--sym-color), 0 1px 0 rgba(0,0,0,0.4);
+}
+/* ブランク（ハズレ目）は控えめに */
+.dcell.is-blank .glyph,
+.ptube-cell.is-blank .glyph { opacity: 0.35; filter: none; }
+
+/* オッズパネル（各シンボルの現在ライン・オッズ。役成立で上昇） */
+.odds-panel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 6px;
+  margin-top: 10px;
+  max-width: 100%;
+}
+.odds-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--panel-border);
+  font-size: 12px;
+}
+.odds-row .odds-glyph { font-size: 13px; line-height: 1; }
+.odds-row.is-text .odds-glyph { color: var(--sym-color); font-weight: 900; font-style: italic; }
+.odds-val { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--gold); }
+.odds-row.up {
+  animation: oddsUp 0.6s ease;
+}
+@keyframes oddsUp {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); border-color: var(--gold); box-shadow: 0 0 12px rgba(255,210,74,0.7); }
+  100% { transform: scale(1); }
+}
 
 /* ワイルドファイブ：残り回数バッジ＋特別な発光 */
 .wild-count {
@@ -854,9 +898,14 @@ body.rush-active .title h1 {
   /* 盤面を「画面の高さ」にも連動させて自動縮小し、HUDまで1画面に収める。
      横幅・高さ・上限116の3条件の min。高さ項の定数=タイトル+HUD等の確保分。 */
   .drop-stack {
-    --dcell: min(106px, calc((100vw - 64px) / 3), calc((100vh - 432px) / 4));
+    /* オッズパネルぶんを高さ予約に追加（1画面に収める） */
+    --dcell: min(106px, calc((100vw - 64px) / 3), calc((100vh - 500px) / 4));
   }
   .drop-previews { margin-top: 12px; }
+  /* オッズパネルをモバイルで圧縮 */
+  .odds-panel { gap: 3px 4px; margin-top: 6px; }
+  .odds-row { padding: 1px 5px; font-size: 10px; }
+  .odds-row .odds-glyph { font-size: 11px; }
 
   /* メーターは1行4列のコンパクト表示に */
   .meters {
