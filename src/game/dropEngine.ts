@@ -46,8 +46,9 @@ export const DSYMBOLS: Record<DSym, DSymDef> = {
   red7:   { id: "red7",   glyph: "7", color: "#ef4444", lineOdds: 20, weight: 0.28 },
   gold7:  { id: "gold7",  glyph: "7", color: "#ffd24a", lineOdds: 1000, weight: 0.02 },
   wild:   { id: "wild",   glyph: "✨", color: "#fff27a", lineOdds: 0, weight: 4 },
-  // ブランク＝無配当のハズレ目。ラインもコネクトも作らない。重みが全体RTPダイヤル。
-  blank:  { id: "blank",  glyph: "🫧", color: "#3a4a6a", lineOdds: 0, weight: 92 },
+  // ブランク＝無配当のハズレ目（空き枠）。ラインもコネクトも作らない。重みが全体RTPダイヤル。
+  // 揃って見えないよう、絵柄は持たせず CSS で「へこんだ空セル」に描画する。
+  blank:  { id: "blank",  glyph: "", color: "#2a3550", lineOdds: 0, weight: 92 },
 };
 
 export const COLS = 3;

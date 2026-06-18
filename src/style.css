@@ -307,9 +307,27 @@ body::before {
   color: var(--sym-color);
   text-shadow: 0 0 8px var(--sym-color), 0 1px 0 rgba(0,0,0,0.4);
 }
-/* ブランク（ハズレ目）は控えめに */
+/* ブランク（ハズレ目）＝明らかな「空き枠」に。絵柄は出さず、へこんだ空セルに見せる */
+.dcell.is-blank,
+.ptube-cell.is-blank {
+  background: linear-gradient(180deg, rgba(8, 8, 22, 0.7), rgba(4, 4, 14, 0.85));
+  border-color: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.75);
+}
 .dcell.is-blank .glyph,
-.ptube-cell.is-blank .glyph { opacity: 0.35; filter: none; }
+.ptube-cell.is-blank .glyph { opacity: 0; }
+/* 中央にうっすら「空き」を示す小さなドット */
+.dcell.is-blank::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14%;
+  height: 14%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
 
 /* スロット右側に縦並びのオッズ表（左端揃え） */
 .drop-main-row {
