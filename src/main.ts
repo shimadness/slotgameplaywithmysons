@@ -207,7 +207,7 @@ async function playDrop(): Promise<void> {
   sfx.resume();
   if (!state.canSpin()) {
     sfx.deny();
-    if (!state.inRush) void effects.banner("クレジット不足", 1200);
+    if (!state.inRush) void effects.banner("メダル不足", 1200);
     return;
   }
 
@@ -294,7 +294,7 @@ async function playSlot(): Promise<void> {
   sfx.resume();
   if (!state.canSpin()) {
     sfx.deny();
-    if (!state.inRush) void effects.banner("クレジット不足", 1200);
+    if (!state.inRush) void effects.banner("メダル不足", 1200);
     return;
   }
 
@@ -435,7 +435,7 @@ function renderPlayerList(): void {
       <div class="player-card${p.id === state.playerId ? " current" : ""}">
         <input class="player-name-input" data-pid="${p.id}" maxlength="12"
                value="${escapeHtml(p.name)}" aria-label="名前" />
-        <div class="player-credits">CREDIT <b>${p.credits.toLocaleString()}</b></div>
+        <div class="player-credits">メダル <b>${p.credits.toLocaleString()}</b></div>
         <button class="btn primary" data-play="${p.id}">これで あそぶ</button>
       </div>`
     )

@@ -29,7 +29,7 @@ export class Hud {
     this.el.className = "hud";
     this.el.innerHTML = `
       <div class="meters">
-        <div class="meter"><span class="meter-label">CREDIT</span><span class="meter-val" data-credit>0</span></div>
+        <div class="meter"><span class="meter-label">メダル</span><span class="meter-val" data-credit>0</span></div>
         <div class="meter"><span class="meter-label">BET / LINE</span><span class="meter-val" data-bet>0</span></div>
         <div class="meter"><span class="meter-label">TOTAL BET</span><span class="meter-val" data-total>0</span></div>
         <div class="meter win"><span class="meter-label">WIN</span><span class="meter-val" data-win>0</span></div>

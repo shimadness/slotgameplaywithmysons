@@ -13,7 +13,7 @@ const DEFAULT_NAMES: Record<PlayerId, string> = {
   p2: "プレイヤー2",
   p3: "プレイヤー3",
 };
-const START_CREDITS = 1000;
+const START_CREDITS = 3000;
 
 const SAVE_PREFIX = "triple-slot.save."; // + playerId
 const META_KEY = "triple-slot.meta"; // 名前 + 直近プレイヤー
