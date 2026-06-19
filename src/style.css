@@ -1015,7 +1015,7 @@ body.rush-active .title h1 {
   inset: 0;
   z-index: 50;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 16px;
   background: radial-gradient(ellipse at 50% 30%, rgba(20, 30, 70, 0.85), rgba(4, 6, 18, 0.94));
@@ -1024,6 +1024,9 @@ body.rush-active .title h1 {
 }
 .du-panel {
   width: min(560px, 100%);
+  /* margin:auto + align-items:flex-start＝収まる時は中央/溢れる時は上から
+     スクロール可能（中央寄せだと上部が見切れてスクロールできない問題の回避） */
+  margin: auto;
   border: 2px solid var(--gold);
   border-radius: 18px;
   background: linear-gradient(180deg, #10173a, #070a1e);
@@ -1218,15 +1221,40 @@ body.rush-active .title h1 {
 .du-half { background: linear-gradient(180deg, #2a6, #184); color: #eafff0; }
 
 @media (max-width: 560px) {
-  .du-panel { padding: 12px; }
-  .du-title { font-size: 22px; }
+  .du-overlay { padding: 8px; }
+  .du-panel { padding: 12px 12px 14px; }
+  .du-title { font-size: 20px; margin-bottom: 8px; }
+  .du-title span { font-size: 14px; }
+  .du-meters { gap: 6px; margin-bottom: 10px; }
+  .du-meter { padding: 6px 4px; }
+  .du-meter label { font-size: 9px; letter-spacing: 0; }
+  .du-meter b { font-size: 17px; }
+
+  /* デッドラー / リール / ボーナスを横並びのまま圧縮して縦を節約 */
   .du-stage {
     grid-template-columns: 1fr;
     grid-template-areas: "dealer" "reels" "bonus";
+    gap: 8px;
   }
-  .du-bonus-list { flex-flow: row wrap; max-height: none; justify-content: center; }
-  .du-bonus-row { flex: 0 0 auto; }
-  .du-meter b { font-size: 18px; }
-  .du-cell { width: 56px; height: 56px; font-size: 28px; }
-  .du-cell.dealer { width: 66px; height: 66px; }
+  .du-label { font-size: 10px; margin-bottom: 4px; }
+  .du-cell { width: 52px; height: 52px; font-size: 26px; border-radius: 10px; }
+  .du-cell.dealer { width: 60px; height: 60px; }
+  .du-gauge { margin-top: 6px; }
+  .du-reel-row { gap: 8px; }
+  .du-select { padding: 5px 4px; font-size: 11px; }
+
+  /* スペシャルボーナスは小チップで2〜3行に折り返し */
+  .du-bonus-list {
+    flex-flow: row wrap;
+    max-height: none;
+    justify-content: center;
+    gap: 4px;
+    font-size: 10px;
+  }
+  .du-bonus-row { flex: 0 0 auto; padding: 2px 5px; }
+
+  .du-msg { font-size: 13px; margin: 8px 0 2px; min-height: 18px; }
+  .du-actions { gap: 6px; }
+  .du-actions .btn { padding: 8px 4px; font-size: 13px; }
+  .du-actions .btn small { font-size: 9px; }
 }

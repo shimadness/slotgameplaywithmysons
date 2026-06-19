@@ -63,11 +63,11 @@ const effects = new Effects(machine, board);
 const doubleUp = new DoubleUp(sfx);
 app.appendChild(doubleUp.el);
 
-// 勝利の精算。通常時はダブルアップに移行（最終額を addWin）。
-// オートプレイ／RUSH中は自動 COLLECT（ダブルアップをスキップ）。
+// 勝利の精算。AUTO中も含めてダブルアップに移行（最終額を addWin）。
+// RUSH（フリースピン）中だけは自動 COLLECT（ダブルアップをスキップ）。
 async function resolveWin(win: number): Promise<void> {
   if (win <= 0) return;
-  if (autoPlay || state.inRush) {
+  if (state.inRush) {
     state.addWin(win);
     hud.animateWin(win);
     return;

@@ -103,15 +103,24 @@ export class Hud {
     this.autoBtn.textContent = on ? "AUTO ●" : "AUTO";
   }
 
+  private busy = false;
+
   /** スピン中などのボタン無効化 */
   setBusy(busy: boolean): void {
+    this.busy = busy;
     const lock = busy || this.state.inRush; // RUSH中はベット変更不可
-    this.spinBtn.disabled = busy;
     this.betBtn.disabled = lock;
     this.maxBtn.disabled = lock;
     this.addBtns.forEach((b) => (b.disabled = lock));
     this.clearBtn.disabled = lock;
     this.spinBtn.textContent = this.state.inRush ? "RUSH SPIN" : busy ? "SPINNING" : "SPIN";
+    this.refreshSpin();
+  }
+
+  /** SPINボタンの有効/無効を更新（スピン中 or ベット0なら不可）。 */
+  private refreshSpin(): void {
+    const noBet = !this.state.inRush && this.state.totalBet < 1;
+    this.spinBtn.disabled = this.busy || noBet;
   }
 
   /** 勝利金額をカウントアップ表示 */
@@ -151,5 +160,6 @@ export class Hud {
     const broke = this.state.credits < this.state.totalBet && !this.state.inRush;
     this.refillBtn.classList.toggle("hidden", !broke);
     this.el.classList.toggle("rush-mode", this.state.inRush);
+    this.refreshSpin(); // ベット変更でSPINの有効/無効を更新
   }
 }

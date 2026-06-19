@@ -5,8 +5,9 @@ import { DEFAULT_SETTEI, SETTEI_RTP } from "./drop";
 export const LINE_BETS = [1, 2, 3, 5, 10] as const;
 export type LineBet = (typeof LINE_BETS)[number];
 
-// DROP モードのベット（1BET/10BET/100BET で増減・上限500の単一ベット）
-export const DROP_BET_MIN = 1;
+// DROP モードのベット（1BET/10BET/100BET で増減・0〜500の単一ベット）
+// 0始まりなので 10BET→10, 20→20 とキリの良い額にできる。0ではSPIN不可。
+export const DROP_BET_MIN = 0;
 export const DROP_BET_MAX = 500;
 
 // --- プレイヤー（3人分の別々のセーブ）-------------------------------
@@ -184,7 +185,8 @@ export class GameState {
   // --- スピン収支 -----------------------------------------------------
   canSpin(): boolean {
     if (this.inRush) return this.freeSpins > 0;
-    return this.credits >= this.totalBet;
+    // ベットが1以上 かつ 残高が足りること（DROPは0ベットだとSPIN不可）
+    return this.totalBet >= 1 && this.credits >= this.totalBet;
   }
 
   /** スピン開始時のベット消費（RUSH中は無料） */
