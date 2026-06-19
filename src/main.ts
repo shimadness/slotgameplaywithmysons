@@ -266,7 +266,7 @@ async function playDrop(): Promise<void> {
     effects.popWin(result.totalWin, big);
     if (big) sfx.winBig();
     else sfx.winSmall();
-    await wait(big ? 900 : 500);
+    await wait(big ? 1900 : 1500); // WIN を見せてからダブルアップへ（+1秒）
     await resolveWin(result.totalWin); // ダブルアップ → addWin
     await wait(300);
   } else {
@@ -367,7 +367,7 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
     if (big) sfx.winBig();
     else sfx.winSmall();
     if (state.inRush) rushWinTotal += ev.total;
-    await wait(big ? 1000 : 600);
+    await wait(big ? 2000 : 1600); // WIN を見せてからダブルアップへ（+1秒）
     await resolveWin(ev.total); // ダブルアップ → addWin（RUSH中は自動collect）
     await wait(300);
   } else {
