@@ -399,12 +399,18 @@ body::before {
   flex: 0 0 auto;
 }
 .odds-row.is-text .odds-glyph { font-size: 12px; color: var(--sym-color); font-weight: 900; font-style: italic; }
+.odds-right {
+  margin-left: auto;     /* 値ブロックを右寄せ、記号は左端 */
+  padding-left: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1;
+}
 .odds-val {
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   color: var(--gold);
-  margin-left: auto;     /* オッズ値は右寄せ、記号は左端 */
-  padding-left: 8px;
   /* だるま落とし風ロールのクリップ窓 */
   overflow: hidden;
   height: 1.25em;
@@ -414,6 +420,15 @@ body::before {
 }
 .odds-roll { display: block; }
 .odds-roll .roll-line { display: block; height: 1.25em; line-height: 1.25em; }
+/* 「次の倍率」プレビュー（現在オッズの下・ライン成立で上がる先） */
+.odds-next {
+  font-size: 8.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: rgba(160, 200, 255, 0.6);
+  margin-top: 1px;
+}
+.odds-next.is-fixed { color: var(--gold); opacity: 0.85; }
 .odds-row.up {
   animation: oddsUp 0.45s ease;
 }
@@ -1022,7 +1037,7 @@ body.rush-active .title h1 {
      横幅・高さ・上限116の3条件の min。高さ項の定数=タイトル+HUD等の確保分。 */
   .drop-stack {
     /* 横にオッズ列があるぶん幅から差し引く。高さは縦並びなので食わない。 */
-    --dcell: min(96px, calc((100vw - 136px) / 3), calc((100vh - 432px) / 4));
+    --dcell: min(96px, calc((100vw - 198px) / 3), calc((100vh - 432px) / 4));
   }
   .drop-previews { margin-top: 12px; }
   /* オッズ列をモバイルで圧縮 */
@@ -1030,6 +1045,8 @@ body.rush-active .title h1 {
   .odds-panel { gap: 2px; padding-top: 16px; }
   .odds-row { padding: 1px 5px; font-size: 10px; gap: 4px; }
   .odds-row .odds-glyph { font-size: 11px; }
+  .odds-right { padding-left: 5px; }
+  .odds-next { font-size: 7.5px; }
 
   /* メーターは1行4列のコンパクト表示に */
   .meters {

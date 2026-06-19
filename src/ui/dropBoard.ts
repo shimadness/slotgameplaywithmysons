@@ -35,6 +35,7 @@ export class DropBoard {
   private previewGlyphs: HTMLElement[][] = [];
   private previewBadges: HTMLElement[][] = [];
   private oddsRows: Record<string, HTMLElement> = {};
+  private oddsNext: Record<string, HTMLElement> = {}; // 「次の倍率」プレビュー
 
   constructor() {
     this.el = document.createElement("div");
@@ -119,29 +120,53 @@ export class DropBoard {
   private buildOddsPanel(): HTMLElement {
     const panel = document.createElement("div");
     panel.className = "odds-panel";
-    for (const id of [...BASE_SYMS].reverse()) {
-      const row = document.createElement("div");
-      row.className = "odds-row";
-      if (id === "bar" || id === "bar2" || id === "bar3" || id === "blue7" || id === "red7")
-        row.classList.add("is-text");
-      row.style.setProperty("--sym-color", dsym(id).color);
-      const g = document.createElement("span");
-      g.className = "odds-glyph glyph";
-      g.textContent = dsym(id).glyph;
-      // クリップ窓＋縦ロール（だるま落とし風に ×N が上から降って入れ替わる）
-      const v = document.createElement("span");
-      v.className = "odds-val";
-      const track = document.createElement("span");
-      track.className = "odds-roll";
-      track.textContent = "×" + dsym(id).lineOdds;
-      track.dataset.v = track.textContent;
-      v.appendChild(track);
-      row.appendChild(g);
-      row.appendChild(v);
-      panel.appendChild(row);
-      this.oddsRows[id] = track;
-    }
+    // gold7（固定×1000・激レア）を最上段に
+    panel.appendChild(this.buildOddsRow("gold7", true));
+    // 以降は弱→強の逆順（red7 が上）。各行に「次の倍率」プレビューを表示
+    for (const id of [...BASE_SYMS].reverse()) panel.appendChild(this.buildOddsRow(id, false));
     return panel;
+  }
+  private buildOddsRow(id: DSym, fixed: boolean): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "odds-row";
+    if (id === "bar" || id === "bar2" || id === "bar3" || id === "blue7" || id === "red7" || id === "gold7")
+      row.classList.add("is-text");
+    row.style.setProperty("--sym-color", dsym(id).color);
+    const g = document.createElement("span");
+    g.className = "odds-glyph glyph";
+    g.textContent = dsym(id).glyph;
+    // クリップ窓＋縦ロール（だるま落とし風に ×N が上から降って入れ替わる）
+    // 右側に [現在オッズ] を上、[次の倍率] を下に縦積み（横幅を増やさない）
+    const right = document.createElement("span");
+    right.className = "odds-right";
+    const v = document.createElement("span");
+    v.className = "odds-val";
+    const track = document.createElement("span");
+    track.className = "odds-roll";
+    track.textContent = "×" + dsym(id).lineOdds;
+    track.dataset.v = track.textContent;
+    v.appendChild(track);
+    const next = document.createElement("span");
+    next.className = "odds-next";
+    if (fixed) {
+      next.textContent = "固定";
+      next.classList.add("is-fixed");
+    } else {
+      const startIdx = ODDS_LADDER.indexOf(dsym(id).lineOdds);
+      next.textContent = this.nextOddsText(startIdx);
+      this.oddsNext[id] = next;
+    }
+    right.appendChild(v);
+    right.appendChild(next);
+    row.appendChild(g);
+    row.appendChild(right);
+    this.oddsRows[id] = track;
+    return row;
+  }
+  /** 現在の階段インデックスから「次に上がる倍率」テキスト（上限なら MAX）。 */
+  private nextOddsText(curIdx: number): string {
+    const max = ODDS_LADDER.length - 1;
+    return curIdx >= max ? "MAX" : "↑×" + ODDS_LADDER[curIdx + 1];
   }
   /** odds は dropEngine の oddsAfter（シンボル→階段インデックス）。上昇時はだるま落とし風ロール。 */
   setOdds(odds: Record<string, number>): void {
@@ -149,6 +174,8 @@ export class DropBoard {
       const idx = odds[id] ?? 0;
       const track = this.oddsRows[id];
       if (!track) continue;
+      const nextEl = this.oddsNext[id]; // 「次の倍率」プレビューも追従
+      if (nextEl) nextEl.textContent = this.nextOddsText(idx);
       const newNum = ODDS_LADDER[idx];
       const newText = "×" + newNum;
       const cur = track.dataset.v || track.textContent;
