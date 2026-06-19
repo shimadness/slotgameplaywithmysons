@@ -2,7 +2,7 @@
 // dropEngine の DropResult を受け取り、回転→連鎖カスケードを描画する。
 import {
   COLS, ROWS, PREVIEW_ROWS, WILD_USES, BASE_SYMS, ODDS_LADDER,
-  DSYMBOLS, neighbors, randomDropSymbol,
+  DSYMBOLS, neighbors, randomDropSymbol, SEVEN_RUSH_GAMES,
   type DSym, type DGrid, type CascadeStep, type DropResult,
 } from "../game/dropEngine";
 
@@ -12,10 +12,14 @@ const FALL_BASE_MS = 320;
 const SQUASH_MS = 140;
 const MAX_DROP_MS = Math.round(FALL_BASE_MS * Math.sqrt(ROWS + 1) + SQUASH_MS);
 
+const REACH_SPIN_MS = 2200; // リーチ時、最終列をゆっくり長く回す時間
+
 export interface DropCallbacks {
   onStep?: (step: CascadeStep) => void;
   onReelStop?: (col: number) => void;
   onAllReelsStopped?: () => void;
+  /** 他の列が止まり、最終列だけがリーチ状態で回り始めた時に1回 */
+  onReach?: () => void;
 }
 
 function wait(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
@@ -92,9 +96,23 @@ export class DropBoard {
     leftCol.appendChild(wrap);
 
     mainRow.appendChild(leftCol);
-    // オッズ表示（11シンボルの現在オッズ。役成立で上昇）をスロット右側に縦並び
-    mainRow.appendChild(this.buildOddsPanel());
+    // 右カラム：オッズ表示（役成立で上昇）＋ 下にセブンラッシュのルール
+    const rightCol = document.createElement("div");
+    rightCol.className = "drop-right";
+    rightCol.appendChild(this.buildOddsPanel());
+    rightCol.appendChild(this.buildRushRule());
+    mainRow.appendChild(rightCol);
     this.el.appendChild(mainRow);
+  }
+
+  // --- セブンラッシュのルール（オッズ列の下の空きスペースに簡潔に） ----
+  private buildRushRule(): HTMLElement {
+    const box = document.createElement("div");
+    box.className = "drop-rush-rule";
+    box.innerHTML = `
+      <div class="rr-title"><span class="rr-7">7️⃣</span> セブンラッシュ</div>
+      <div class="rr-body">7️⃣が<b>3つ</b>そろうと<b>${SEVEN_RUSH_GAMES}ゲーム</b>突入。<br>“<b>7</b>”が大量に出て<b>高配当</b>のチャンス！</div>`;
+    return box;
   }
 
   // --- オッズパネル --------------------------------------------------
@@ -299,12 +317,23 @@ export class DropBoard {
 
   // --- 回転（スピンイン） --------------------------------------------
   private spinIn(initial: DGrid, initialWild: number[][], initialFrozen: boolean[][], cb: DropCallbacks): Promise<void> {
+    const reachCol = COLS - 1;
+    // リーチ＝最終列で完成するラインの「既知2セル」が揃っている＝最後の枠次第
+    const reach = this.detectReach(initial, initialFrozen);
     const start = performance.now();
-    const dur = (c: number) => 620 + c * 240;
+    const dur = (c: number) => (c === reachCol && reach ? REACH_SPIN_MS : 620 + c * 240);
     const stopped = [false, false, false];
     const lastSwap = [0, 0, 0];
+    let reachAnnounced = false;
     return new Promise<void>((resolve) => {
       const tick = (t: number) => {
+        // 他の列が止まり、最終列だけ回っている瞬間にリーチ告知＋発光
+        if (reach && !reachAnnounced && !stopped[reachCol] &&
+            stopped.slice(0, reachCol).every(Boolean)) {
+          reachAnnounced = true;
+          for (let r = 0; r < ROWS; r++) this.cells[reachCol][r].classList.add("reach-spin");
+          cb.onReach?.();
+        }
         let all = true;
         for (let c = 0; c < COLS; c++) {
           if (stopped[c]) continue;
@@ -312,11 +341,15 @@ export class DropBoard {
           if (p >= 1) {
             stopped[c] = true;
             for (let r = 0; r < ROWS; r++) this.paintCell(c, r, initial[c][r], undefined, initialWild[c][r], initialFrozen[c][r]);
+            if (c === reachCol) for (let r = 0; r < ROWS; r++) this.cells[c][r].classList.remove("reach-spin");
             cb.onReelStop?.(c);
           } else {
             all = false;
             const blur = 1 - easeOutCubic(p);
-            if (t - lastSwap[c] > 45) { lastSwap[c] = t; this.spinFrame(c, blur); }
+            // リーチ中の最終列は終盤ほど切り替えを遅く＝ゆっくり回って見える
+            const isReachCol = reach && c === reachCol;
+            const swapMs = isReachCol ? 45 + (1 - blur) * 240 : 45;
+            if (t - lastSwap[c] > swapMs) { lastSwap[c] = t; this.spinFrame(c, blur); }
             else this.applyBlur(c, blur);
           }
         }
@@ -325,6 +358,23 @@ export class DropBoard {
       };
       requestAnimationFrame(tick);
     });
+  }
+
+  /** リーチ判定：最終列(col2)で完成するライン(横3・斜め2)の既知2セルが揃うか。 */
+  private detectReach(g: DGrid, fz: boolean[][]): boolean {
+    const pairs: Array<[[number, number], [number, number]]> = [];
+    for (let r = 0; r < ROWS; r++) pairs.push([[0, r], [1, r]]); // 横3本（保留=(2,r)）
+    pairs.push([[0, 0], [1, 1]]); // 斜め＼（保留=(2,2)）
+    pairs.push([[1, 1], [0, 2]]); // 斜め／（保留=(2,0)）
+    return pairs.some(([a, b]) => this.cellsMatch(g, fz, a, b));
+  }
+  private cellsMatch(g: DGrid, fz: boolean[][], a: [number, number], b: [number, number]): boolean {
+    const [ac, ar] = a, [bc, br] = b;
+    if (fz[ac][ar] || fz[bc][br]) return false;          // 氷は役に使えない
+    const sa = g[ac][ar], sb = g[bc][br];
+    if (sa === "rush7" || sb === "rush7") return false;  // スキャッターは役に不参加
+    if (sa === "wild" || sb === "wild") return true;     // ワイルドは何にでも一致
+    return sa === sb;
   }
 
   // --- 役ハイライト（ライン＋コネクト） ------------------------------

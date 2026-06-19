@@ -10,7 +10,7 @@ import {
   type Grid,
   type SpinEvaluation,
 } from "./game/paylines";
-import { play as dropPlay, DSYMBOLS, BASE_SYMS, type DSym } from "./game/dropEngine";
+import { play as dropPlay, DSYMBOLS, BASE_SYMS, SEVEN_RUSH_GAMES, type DSym } from "./game/dropEngine";
 import { DU_LADDER, SPECIAL_BONUS, UPPER_CAP, duGlyph, duColor } from "./game/doubleup";
 import { Sfx } from "./audio/sfx";
 import { Board } from "./ui/board";
@@ -229,7 +229,8 @@ async function playDrop(): Promise<void> {
   state.placeBet();
   hud.update();
 
-  const result = dropPlay(state.bet); // 本家準拠エンジン（固定配当・dropBet 倍率）
+  const inRush = state.inRush; // このスピン開始時点でラッシュ中か
+  const result = dropPlay(state.bet, undefined, inRush); // ラッシュ中は7大量プール
 
   sfx.startSpin();
 
@@ -237,6 +238,7 @@ async function playDrop(): Promise<void> {
   await dropBoard.run(result, {
     onReelStop: () => sfx.reelStop(),
     onAllReelsStopped: () => sfx.stopSpin(),
+    onReach: () => { sfx.reach(); void effects.banner("リーチ！", 900); },
     onStep: (step) => {
       sfx.chain(step.chain);
       running += step.stepWin;
@@ -266,16 +268,46 @@ async function playDrop(): Promise<void> {
     effects.popWin(result.totalWin, big);
     if (big) sfx.winBig();
     else sfx.winSmall();
-    await wait(big ? 1900 : 1500); // WIN を見せてからダブルアップへ（+1秒）
-    await resolveWin(result.totalWin); // ダブルアップ → addWin
+    // ラッシュ中は自動collectなので短め、通常はダブルアップ前に余韻(+1秒)
+    await wait(inRush ? (big ? 700 : 400) : (big ? 1900 : 1500));
+    await resolveWin(result.totalWin); // ラッシュ中は自動collect / 通常はダブルアップ
+    if (inRush) rushWinTotal += result.totalWin;
     await wait(300);
   } else {
     await wait(200);
   }
 
+  // セブンラッシュ突入（通常スピンで初期盤面にスキャッター3個以上）
+  if (!inRush && result.triggeredRush) {
+    rushWinTotal = 0;
+    state.startRush(SEVEN_RUSH_GAMES, 1);
+    enterRushFx();
+    sfx.bonus();
+    await effects.banner(`★ セブンラッシュ 突入！ ${SEVEN_RUSH_GAMES}ゲーム ★`, 1900);
+    hud.update();
+  }
+
   busy = false;
   hud.setBusy(false);
   hud.update();
+
+  if (state.inRush) {
+    if (state.freeSpins > 0) setTimeout(() => void play(), 1000);
+    else await finishDropRush();
+  } else {
+    maybeAutoNext();
+  }
+}
+
+async function finishDropRush(): Promise<void> {
+  const total = rushWinTotal;
+  state.endRush();
+  exitRushFx();
+  hud.setBusy(false); // SPINボタンの表示を "RUSH SPIN" → "SPIN" に戻す
+  hud.update();
+  sfx.winBig();
+  effects.burst(160);
+  await effects.banner(`セブンラッシュ 終了！ 獲得 ${total.toLocaleString()}`, 2400);
   maybeAutoNext();
 }
 
@@ -396,6 +428,7 @@ async function finishRush(): Promise<void> {
   const total = rushWinTotal;
   state.endRush();
   exitRushFx();
+  hud.setBusy(false); // SPINボタンの表示を "RUSH SPIN" → "SPIN" に戻す
   hud.update();
   sfx.winBig();
   effects.burst(160);
@@ -480,7 +513,7 @@ function buildPaytable(): void {
   const DROP_NAMES: Record<DSym, string> = {
     cherry: "チェリー", orange: "オレンジ", plum: "プラム", banana: "バナナ",
     melon: "メロン", bell: "ベル", bar: "BAR", bar2: "BAR²", bar3: "BAR³",
-    blue7: "青7", red7: "赤7", gold7: "GOLD7", wild: "ワイルド5",
+    blue7: "青7", red7: "赤7", gold7: "GOLD7", wild: "ワイルド5", rush7: "ラッシュ7",
   };
 
   const overlay = document.createElement("div");

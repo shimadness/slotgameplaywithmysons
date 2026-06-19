@@ -19,7 +19,7 @@ export function duColor(s: DSym): string { return DSYMBOLS[s].color; }
 export const SPECIAL_BONUS: Record<DSym, number> = {
   cherry: 30, orange: 45, plum: 60, banana: 90, melon: 120, bell: 150,
   bar: 300, bar2: 450, bar3: 600, blue7: 900, red7: 1500, gold7: 3000,
-  wild: 0,
+  wild: 0, rush7: 0,
 };
 
 /** 価値の上限。これを超えたら強制 COLLECT。 */

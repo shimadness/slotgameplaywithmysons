@@ -13,7 +13,8 @@
 export type DSym =
   | "cherry" | "orange" | "plum" | "banana" | "melon" | "bell"
   | "bar" | "bar2" | "bar3" | "blue7" | "red7" | "gold7"
-  | "wild";
+  | "wild"
+  | "rush7"; // セブンラッシュ突入スキャッター（役には不参加・3個で突入）
 
 /** 配当に関わる土台シンボル（弱→強・11種）。gold7/wild は別扱い。 */
 export const BASE_SYMS: DSym[] = [
@@ -31,6 +32,18 @@ export interface DSymDef {
   weight: number;
 }
 
+// ---- セブンラッシュ -----------------------------------------------
+/** 突入スキャッターの出現重み（初期盤面のみ。3個以上で突入）。 */
+export const SCATTER_WEIGHT = 28;
+/** ラッシュのゲーム数（固定）。 */
+export const SEVEN_RUSH_GAMES = 7;
+/** ラッシュ中の出現重み（7を大量に。fruitsは抑える）。 */
+const RUSH_WEIGHTS: Record<DSym, number> = {
+  cherry: 8, orange: 8, plum: 8, banana: 8, melon: 8, bell: 6,
+  bar: 5, bar2: 3, bar3: 2, blue7: 40, red7: 26, gold7: 0.8,
+  wild: 2, rush7: 0, // ラッシュ中はスキャッター無し（再突入なし）
+};
+
 export const DSYMBOLS: Record<DSym, DSymDef> = {
   // weight は弱→強。全体RTPは FREEZE_RATE（氷出現率）で調整（固定配当・1BET経済で約95%）。
   cherry: { id: "cherry", glyph: "🍒", color: "#ff5c7a", lineOdds: 1, weight: 100 },
@@ -46,6 +59,8 @@ export const DSYMBOLS: Record<DSym, DSymDef> = {
   red7:   { id: "red7",   glyph: "7", color: "#ef4444", lineOdds: 20, weight: 0.28 },
   gold7:  { id: "gold7",  glyph: "7", color: "#ffd24a", lineOdds: 1000, weight: 0.02 },
   wild:   { id: "wild",   glyph: "✨", color: "#fff27a", lineOdds: 0, weight: 2 },
+  // セブンラッシュ・スキャッター。役には不参加。初期盤面に3個以上で突入。
+  rush7:  { id: "rush7",  glyph: "7️⃣", color: "#ffb000", lineOdds: 0, weight: SCATTER_WEIGHT },
 };
 
 /** 氷（凍結）出現率＝新しい全体RTPダイヤル。凍ったセルは溶けるまで役に使えない
@@ -176,29 +191,48 @@ export interface DropResult {
   /** コンボボーナス（連鎖終了時に1回。4連鎖以上で BET×倍率） */
   comboMult: number;
   comboPay: number;
+  /** 初期盤面のスキャッター数と、3個以上で突入したか（ラッシュ中は常に false） */
+  scatterCount: number;
+  triggeredRush: boolean;
 }
 
 // ---- 抽選 ---------------------------------------------------------
-let POOL: DSym[] = buildPool();
-function buildPool(): DSym[] {
+// 3種のプール：
+//  INIT＝初期盤面（スキャッター入り）／ FILL＝補充・NEXT（スキャッター無し）
+//  RUSH＝ラッシュ中（7大量・スキャッター無し）
+function buildWeightedPool(weights: Record<DSym, number>): DSym[] {
   // 小数の重みも扱えるよう ×100 して丸める（gold7=0.02 等を切り捨てない）。
   const p: DSym[] = [];
-  for (const id of Object.keys(DSYMBOLS) as DSym[]) {
-    const n = Math.round(DSYMBOLS[id].weight * 100);
+  for (const id of Object.keys(weights) as DSym[]) {
+    const n = Math.round((weights[id] ?? 0) * 100);
     for (let i = 0; i < n; i++) p.push(id);
   }
   return p;
 }
+function normalWeights(includeScatter: boolean): Record<DSym, number> {
+  const w = {} as Record<DSym, number>;
+  for (const id of Object.keys(DSYMBOLS) as DSym[]) w[id] = DSYMBOLS[id].weight;
+  if (!includeScatter) w.rush7 = 0;
+  return w;
+}
+let POOL_INIT: DSym[] = buildWeightedPool(normalWeights(true));
+let POOL_FILL: DSym[] = buildWeightedPool(normalWeights(false));
+let POOL_RUSH: DSym[] = buildWeightedPool(RUSH_WEIGHTS);
 /** 重み(DSYMBOLS[*].weight)を書き換えた後に呼ぶとプールを作り直す（RTP調整用）。 */
-export function rebuildPool(): void { POOL = buildPool(); }
-function pick(): DSym { return POOL[(Math.random() * POOL.length) | 0]; }
-export function randomDropSymbol(): DSym { return pick(); }
+export function rebuildPool(): void {
+  POOL_INIT = buildWeightedPool(normalWeights(true));
+  POOL_FILL = buildWeightedPool(normalWeights(false));
+  POOL_RUSH = buildWeightedPool(RUSH_WEIGHTS);
+}
+function pickFrom(pool: DSym[]): DSym { return pool[(Math.random() * pool.length) | 0]; }
+/** UIのスピン演出用（スキャッターは見せない）。 */
+export function randomDropSymbol(): DSym { return pickFrom(POOL_FILL); }
 
-function randomBoard(): { grid: DGrid; frozen: boolean[][] } {
+function randomBoard(initPool: DSym[], allowFreeze: boolean): { grid: DGrid; frozen: boolean[][] } {
   const g: DGrid = [], f: boolean[][] = [];
   for (let c = 0; c < COLS; c++) {
     const col: DSym[] = [], fc: boolean[] = [];
-    for (let r = 0; r < ROWS; r++) { col.push(pick()); fc.push(freezeRoll()); }
+    for (let r = 0; r < ROWS; r++) { col.push(pickFrom(initPool)); fc.push(allowFreeze && freezeRoll()); }
     g.push(col); f.push(fc);
   }
   return { grid: g, frozen: f };
@@ -215,6 +249,7 @@ function lineSymbol(g: DGrid, fz: boolean[][], cells: Array<[number, number]>): 
   for (const [c, r] of cells) {
     if (fz[c][r]) return null; // 氷が1つでもあればライン不成立（溶けるまで使えない）
     const s = g[c][r];
+    if (s === "rush7") return null; // スキャッターは役に不参加（ライン不成立）
     if (s === "wild") continue;
     if (base === null) base = s;
     else if (base !== s) return null;
@@ -229,7 +264,7 @@ export function findConnects(g: DGrid, fz: boolean[][]): ConnectWin[] {
   for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
     if (fz[c][r]) continue; // 氷は役に使えない
     const s = g[c][r];
-    if (s !== "wild") bases.add(s);
+    if (s !== "wild" && s !== "rush7") bases.add(s); // スキャッターは役に不参加
   }
   const out: ConnectWin[] = [];
   const claimed = new Set<string>(); // 土台セルのみ確定（wildは共有可）
@@ -290,7 +325,8 @@ export function findConnects(g: DGrid, fz: boolean[][]): ConnectWin[] {
 // ---- 落下＆補充（旧版踏襲） ---------------------------------------
 export const PREVIEW_ROWS = 1;
 function collapse(
-  g: DGrid, ch: number[][], fz: boolean[][], cleared: Array<[number, number]>, streams: DSym[][]
+  g: DGrid, ch: number[][], fz: boolean[][], cleared: Array<[number, number]>,
+  streams: DSym[][], fill: () => DSym
 ): { grid: DGrid; charges: number[][]; frozen: boolean[][]; from: number[][] } {
   const clearedSet = new Set(cleared.map(([c, r]) => `${c},${r}`));
   const out: DGrid = [], outCh: number[][] = [], outFz: boolean[][] = [], from: number[][] = [];
@@ -301,7 +337,7 @@ function collapse(
         survivors.push({ sym: g[c][r], charge: ch[c][r], frozen: fz[c][r], row: r });
     const spawnCount = ROWS - survivors.length;
     const taken = streams[c].splice(0, spawnCount);
-    while (streams[c].length < PREVIEW_ROWS + 3) streams[c].push(pick());
+    while (streams[c].length < PREVIEW_ROWS + 3) streams[c].push(fill());
     const col: DSym[] = new Array(ROWS);
     const colCh: number[] = new Array(ROWS);
     const colFz: boolean[] = new Array(ROWS);
@@ -351,13 +387,25 @@ function raiseOdds(oddsIdx: Record<string, number>, sym: DSym): void {
 /**
  * @param bet         1スピンのベット（=「1BET」。totalBet ではなく単一ベット単位）
  * @param oddsCarry   フリーゲーム用に持ち越すオッズ状態（無ければ新規）
+ * @param rush        セブンラッシュ中なら true（7大量プール・スキャッター無し・氷無し）
  */
-export function play(bet: number, oddsCarry?: Record<string, number>): DropResult {
-  const board = randomBoard();
+export function play(bet: number, oddsCarry?: Record<string, number>, rush = false): DropResult {
+  const initPool = rush ? POOL_RUSH : POOL_INIT;
+  const fillPool = rush ? POOL_RUSH : POOL_FILL;
+  const fill = () => pickFrom(fillPool);
+
+  const board = randomBoard(initPool, !rush); // ラッシュ中は氷を出さない
   const initial = board.grid;
   const initialFrozen = board.frozen;
+
+  // 突入判定：通常スピンで初期盤面にスキャッター3個以上
+  let scatterCount = 0;
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++)
+    if (initial[c][r] === "rush7") scatterCount++;
+  const triggeredRush = !rush && scatterCount >= 3;
+
   const streams: DSym[][] = Array.from({ length: COLS }, () =>
-    Array.from({ length: PREVIEW_ROWS + 4 }, () => pick())
+    Array.from({ length: PREVIEW_ROWS + 4 }, () => fill())
   );
   const initialPreview = previewOf(streams);
   const initialWild = wildChargesOf(initial);
@@ -420,7 +468,7 @@ export function play(bet: number, oddsCarry?: Record<string, number>): DropResul
     total += stepWin;
 
     const { grid: after, charges: chAfter, frozen: fzAfter, from } =
-      collapse(grid, charges, frozen, cleared, streams);
+      collapse(grid, charges, frozen, cleared, streams, fill);
     steps.push({
       chain, lineWins, connectWins, comboMult: 0, comboPay: 0,
       cleared, stepWin, gridAfter: after, wildAfter: chAfter,
@@ -439,5 +487,6 @@ export function play(bet: number, oddsCarry?: Record<string, number>): DropResul
     initial, initialWild, initialFrozen, initialPreview, oddsStart,
     steps, totalWin: total, maxChain: chain,
     comboMult: cMult, comboPay,
+    scatterCount, triggeredRush,
   };
 }
