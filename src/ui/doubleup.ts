@@ -69,24 +69,24 @@ export class DoubleUp {
     });
   }
 
-  // ---- 1ラウンド開始（ディーラー提示→ベット選択）------------------
+  // ---- 1ラウンド開始（ベット選択→ディーラー決定→3択）-------------
   private beginRound(): void {
     this.clearSpin();
     this.round = dealRound();
     this.phase = "bet";
 
-    // ディーラーを表示、プレイヤーリールは伏せる
-    this.setGlyph(this.dealerGlyph, this.round.dealer);
-    this.gaugeFill.style.width = `${((rank(this.round.dealer) + 0.5) / DU_LADDER.length) * 100}%`;
+    // ディーラーもプレイヤーリールも伏せる（ベット選択後にディーラーが決まる）
+    this.faceDown(this.dealerGlyph);
+    this.gaugeFill.style.width = "0%";
     this.reelEls.forEach((r) => {
       r.classList.remove("revealed", "win", "lose");
-      r.querySelector(".du-reel-glyph")!.textContent = "?";
-      (r.querySelector(".du-reel-glyph") as HTMLElement).style.color = "#9fb0d0";
+      this.faceDown(r.querySelector(".du-reel-glyph") as HTMLElement);
     });
     this.selectBtns.forEach((b) => (b.disabled = true));
 
     this.updateMeters();
     this.setBetButtons(true);
+    this.msg("ダブルアップ！ COLLECT / 半分 / 全部 を えらんでね");
   }
 
   private setBetButtons(enabled: boolean): void {
@@ -112,18 +112,37 @@ export class DoubleUp {
     const half = Math.floor(this.atRisk / 2);
     this.save += half;
     this.atRisk -= half; // 残り半分を勝負にさらす
-    this.goPick();
+    this.startDealer();
   }
   private onFull(): void {
     this.sfx.ui();
-    this.goPick(); // atRisk 全部を勝負（save はロックのまま安全）
+    this.startDealer(); // atRisk 全部を勝負（save はロックのまま安全）
+  }
+
+  // ---- ベット確定 → ディーラーをスピンして決定 --------------------
+  private startDealer(): void {
+    this.phase = "reveal"; // ディーラー決定中は操作ロック
+    this.setBetButtons(false);
+    this.updateMeters();
+    this.msg("ディーラーの目を きめています…");
+
+    const glyph = this.dealerGlyph;
+    const t = window.setInterval(() => {
+      this.setGlyph(glyph, DU_LADDER[(Math.random() * DU_LADDER.length) | 0]);
+    }, 60);
+    this.spinTimers.push(t);
+    window.setTimeout(() => {
+      clearInterval(t);
+      this.setGlyph(glyph, this.round.dealer);
+      this.gaugeFill.style.width = `${((rank(this.round.dealer) + 0.5) / DU_LADDER.length) * 100}%`;
+      this.sfx.reelStop();
+      this.goPick();
+    }, 750);
   }
 
   // ---- 3箇所から選ぶフェーズ ---------------------------------------
   private goPick(): void {
     this.phase = "pick";
-    this.setBetButtons(false);
-    this.updateMeters();
     this.msg("3つの中から ディーラーより強い目を えらべ！");
     this.selectBtns.forEach((b) => (b.disabled = false));
     this.reelEls.forEach((r) => r.classList.add("pickable"));
@@ -145,9 +164,7 @@ export class DoubleUp {
     this.reelEls.forEach((r, i) => {
       const glyph = r.querySelector(".du-reel-glyph") as HTMLElement;
       const t = window.setInterval(() => {
-        const s = DU_LADDER[(Math.random() * DU_LADDER.length) | 0];
-        glyph.textContent = duGlyph(s);
-        glyph.style.color = duColor(s);
+        this.setGlyph(glyph, DU_LADDER[(Math.random() * DU_LADDER.length) | 0]);
       }, 60);
       this.spinTimers.push(t);
       window.setTimeout(() => {
@@ -215,6 +232,14 @@ export class DoubleUp {
   private setGlyph(el: HTMLElement, s: DSym): void {
     el.textContent = duGlyph(s);
     el.style.color = duColor(s);
+    // BAR/BAR²/BAR³ は横長なのでセルに収まるよう縮小クラスを付与
+    el.classList.toggle("is-bar", s === "bar" || s === "bar2" || s === "bar3");
+  }
+  /** セルを伏せ状態（?）にする。 */
+  private faceDown(el: HTMLElement): void {
+    el.textContent = "?";
+    el.style.color = "#9fb0d0";
+    el.classList.remove("is-bar");
   }
   private msg(text: string): void {
     this.msgEl.textContent = text;

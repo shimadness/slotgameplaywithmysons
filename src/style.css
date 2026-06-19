@@ -1106,6 +1106,7 @@ body.rush-active .title h1 {
   border: 1px solid var(--panel-border);
   font-size: 34px;
   font-weight: 900;
+  overflow: hidden;
 }
 .du-cell.dealer {
   width: 76px;
@@ -1113,6 +1114,11 @@ body.rush-active .title h1 {
   border-color: var(--pink);
   box-shadow: 0 0 18px rgba(255, 92, 122, 0.4);
 }
+.du-reel-glyph,
+.du-dealer-glyph { line-height: 1; white-space: nowrap; }
+/* BAR/BAR²/BAR³ はセル幅に収まるよう縮小 */
+.du-reel-glyph.is-bar,
+.du-dealer-glyph.is-bar { font-size: 0.5em; letter-spacing: -0.5px; }
 
 .du-gauge {
   display: flex;
