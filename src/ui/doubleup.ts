@@ -179,11 +179,8 @@ export class DoubleUp {
 
   // ---- 勝敗判定・精算 ----------------------------------------------
   private settle(picked: number): void {
+    // スペシャル（3つ揃い）が最優先
     const special = isSpecial(this.round);
-    const won = special != null || beatsDealer(this.round, picked);
-
-    this.reelEls[picked].classList.add(won ? "win" : "lose");
-
     if (special != null) {
       this.atRisk *= 2;
       const bonus = SPECIAL_BONUS[special] * this.lineBet;
@@ -195,6 +192,19 @@ export class DoubleUp {
       window.setTimeout(() => this.finish(total), 1800);
       return;
     }
+
+    // 同じ目（同点）＝引き分け → 賭けはそのままでリトライ
+    if (rank(this.round.reels[picked]) === rank(this.round.dealer)) {
+      this.reelEls[picked].classList.add("tie");
+      this.dealerGlyph.parentElement?.classList.add("tie");
+      this.sfx.reelStop();
+      this.msg("DRAW… おなじ目！ もう一度！");
+      window.setTimeout(() => this.retryRound(), 1300);
+      return;
+    }
+
+    const won = beatsDealer(this.round, picked);
+    this.reelEls[picked].classList.add(won ? "win" : "lose");
 
     if (won) {
       this.atRisk *= 2;
@@ -217,6 +227,20 @@ export class DoubleUp {
       this.msg(total > 0 ? `LOSE… セーブ ${total.toLocaleString()} を確保` : "LOSE… 残念！");
       window.setTimeout(() => this.finish(total), 1500);
     }
+  }
+
+  // 同点リトライ：賭け(atRisk/save)はそのまま、ディーラーを引き直してスピン。
+  private retryRound(): void {
+    this.clearSpin();
+    this.round = dealRound();
+    this.dealerGlyph.parentElement?.classList.remove("tie");
+    this.faceDown(this.dealerGlyph);
+    this.gaugeFill.style.width = "0%";
+    this.reelEls.forEach((r) => {
+      r.classList.remove("revealed", "win", "lose", "tie", "pickable");
+      this.faceDown(r.querySelector(".du-reel-glyph") as HTMLElement);
+    });
+    this.startDealer(); // ベット選択は飛ばして同じ賭けで再スピン
   }
 
   // ---- 終了 ---------------------------------------------------------

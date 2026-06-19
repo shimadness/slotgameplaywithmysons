@@ -45,7 +45,7 @@ export const DSYMBOLS: Record<DSym, DSymDef> = {
   blue7:  { id: "blue7",  glyph: "7", color: "#3b82f6", lineOdds: 16, weight: 0.6 },
   red7:   { id: "red7",   glyph: "7", color: "#ef4444", lineOdds: 20, weight: 0.28 },
   gold7:  { id: "gold7",  glyph: "7", color: "#ffd24a", lineOdds: 1000, weight: 0.02 },
-  wild:   { id: "wild",   glyph: "✨", color: "#fff27a", lineOdds: 0, weight: 4 },
+  wild:   { id: "wild",   glyph: "✨", color: "#fff27a", lineOdds: 0, weight: 2 },
 };
 
 /** 氷（凍結）出現率＝新しい全体RTPダイヤル。凍ったセルは溶けるまで役に使えない

@@ -1169,6 +1169,17 @@ body.rush-active .title h1 {
   box-shadow: 0 0 22px var(--gold);
 }
 .du-reel.lose .du-cell { opacity: 0.45; }
+/* 同点（引き分け）= リトライ。中立の青で点滅 */
+.du-reel.tie .du-cell,
+.du-cell.dealer.tie {
+  border-color: var(--neon);
+  box-shadow: 0 0 20px rgba(79, 195, 255, 0.8);
+  animation: duTie 0.5s ease-in-out infinite alternate;
+}
+@keyframes duTie {
+  from { box-shadow: 0 0 8px rgba(79, 195, 255, 0.4); }
+  to { box-shadow: 0 0 22px rgba(79, 195, 255, 0.95); }
+}
 .du-select {
   padding: 6px 4px;
   font-size: 12px;
