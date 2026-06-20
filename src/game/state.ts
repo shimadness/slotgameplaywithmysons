@@ -196,6 +196,9 @@ export class GameState {
     } else {
       this.credits -= this.totalBet;
     }
+    // ベット消費を即永続化。これをしないと addWin 前（スピン演出中／
+    // ダブルアップ中）にリロードされるとベットが巻き戻る（タダ回し）。
+    this.save();
   }
 
   addWin(amount: number): void {

@@ -41,8 +41,13 @@ export const SEVEN_RUSH_GAMES = 7;
 const RUSH_WEIGHTS: Record<DSym, number> = {
   cherry: 8, orange: 8, plum: 8, banana: 8, melon: 8, bell: 6,
   bar: 5, bar2: 3, bar3: 2, blue7: 40, red7: 26, gold7: 0.8,
-  wild: 2, rush7: 0, // ラッシュ中はスキャッター無し（再突入なし）
+  wild: 0, rush7: 0, // ワイルド5はプール非抽選（初期NEXTに注入）/ スキャッターも無し
 };
+
+// ---- ワイルド5の出現制御 ------------------------------------------
+// プール抽選では一切出さず、各ゲームで最大1個だけ「初期NEXT枠」に注入する。
+// （最初の3×3盤面には出さない・NEXTの初回のみ・1ゲーム1回まで）
+export const WILD_SPAWN_CHANCE = 0.12; // 1ゲームあたりワイルド5がNEXTに出る確率
 
 export const DSYMBOLS: Record<DSym, DSymDef> = {
   // weight は弱→強。全体RTPは FREEZE_RATE（氷出現率）で調整（固定配当・1BET経済で約95%）。
@@ -212,6 +217,7 @@ function buildWeightedPool(weights: Record<DSym, number>): DSym[] {
 function normalWeights(includeScatter: boolean): Record<DSym, number> {
   const w = {} as Record<DSym, number>;
   for (const id of Object.keys(DSYMBOLS) as DSym[]) w[id] = DSYMBOLS[id].weight;
+  w.wild = 0; // ワイルド5はプール抽選からは出さない（初期NEXTにのみ注入）
   if (!includeScatter) w.rush7 = 0;
   return w;
 }
@@ -407,6 +413,12 @@ export function play(bet: number, oddsCarry?: Record<string, number>, rush = fal
   const streams: DSym[][] = Array.from({ length: COLS }, () =>
     Array.from({ length: PREVIEW_ROWS + 4 }, () => fill())
   );
+  // ワイルド5：最初の3×3には出さず、ここで初回NEXT枠に最大1個だけ注入
+  // （1ゲーム1回まで。落下するのは役成立でその列が空いた時）
+  if (Math.random() < WILD_SPAWN_CHANCE) {
+    const col = (Math.random() * COLS) | 0;
+    streams[col][0] = "wild";
+  }
   const initialPreview = previewOf(streams);
   const initialWild = wildChargesOf(initial);
   const oddsIdx = oddsCarry ? { ...oddsCarry } : freshOdds();
