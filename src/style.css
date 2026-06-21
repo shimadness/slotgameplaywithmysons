@@ -1009,7 +1009,15 @@ body.rush-active .title h1 {
 
 @media (max-width: 560px) {
   :root { --cell: 60px; --reel-gap: 5px; }
-  body { padding: 10px 8px 16px; }
+  /* ネイティブ(Capacitor)/ノッチ端末: セーフエリア分を余白に確保。
+     env() は非対応ブラウザでは 0 扱い → 最低値の方が効く */
+  body {
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+  }
   .cabinet { padding: 10px; border-radius: 16px; }
   .machine { padding: 10px; }
 
@@ -1037,7 +1045,9 @@ body.rush-active .title h1 {
      横幅・高さ・上限116の3条件の min。高さ項の定数=タイトル+HUD等の確保分。 */
   .drop-stack {
     /* 横にオッズ列があるぶん幅から差し引く。高さは縦並びなので食わない。 */
-    --dcell: min(96px, calc((100vw - 198px) / 3), calc((100vh - 432px) / 4));
+    /* 100dvh = モバイル/WebViewの「実際に見えている高さ」。
+       100vh だとSafariのURLバー裏まで含み溢れるため dvh に統一 */
+    --dcell: min(96px, calc((100vw - 198px) / 3), calc((100dvh - 432px) / 4));
   }
   .drop-previews { margin-top: 12px; }
   /* オッズ列をモバイルで圧縮 */
