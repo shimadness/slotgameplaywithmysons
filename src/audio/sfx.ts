@@ -19,6 +19,7 @@ export class Sfx {
   private lineWinBufs: (AudioBuffer | null)[] = [null, null, null, null, null];
   private playStartBuf: AudioBuffer | null = null;
   private playStartSrc: AudioBufferSourceNode | null = null;
+  private playStartGain: GainNode | null = null;
   private samplesLoading = false;
   muted = false;
 
@@ -114,23 +115,9 @@ export class Sfx {
 
   // --- ゲームイベント別 -------------------------------------------------
 
-  /** スピン中のループ音を開始 */
+  /** スピン中のループ音。ユーザー要望で「ブー」音は廃止＝無音（呼び出しは互換のため残す）。 */
   startSpin(): void {
-    if (!this.ctx || !this.out || this.spinNodes) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = "sawtooth";
-    osc.frequency.value = 70;
-    gain.gain.value = 0.06;
-    const lfo = this.ctx.createOscillator();
-    const lfoGain = this.ctx.createGain();
-    lfo.frequency.value = 22;
-    lfoGain.gain.value = 18;
-    lfo.connect(lfoGain).connect(osc.frequency);
-    osc.connect(gain).connect(this.out);
-    osc.start();
-    lfo.start();
-    this.spinNodes = { osc, gain };
+    /* 意図的に無音。サンプル音(playStart)側でスピン中の演出を担う。 */
   }
 
   stopSpin(): void {
@@ -180,25 +167,44 @@ export class Sfx {
     src.start();
   }
 
-  /** ゲーム開始〜初回配当決定の効果音を再生（1回）。リール停止で stopPlayStart() で切る。 */
+  /** ゲーム開始効果音を再生（1回・最後まで流す）。被る時は fadeOutPlayStart() で徐々に消す。 */
   playStart(): void {
     if (!this.ctx || !this.out || !this.playStartBuf) return;
-    this.stopPlayStart(); // 多重再生防止
+    this.stopPlayStart(); // 前回ぶんを止めて多重再生防止
     const src = this.ctx.createBufferSource();
     src.buffer = this.playStartBuf;
     const g = this.ctx.createGain();
     g.gain.value = 0.7; // master(0.35)経由。音量はここで調整
     src.connect(g).connect(this.out);
-    src.onended = () => { if (this.playStartSrc === src) this.playStartSrc = null; };
+    src.onended = () => {
+      if (this.playStartSrc === src) { this.playStartSrc = null; this.playStartGain = null; }
+    };
     src.start();
     this.playStartSrc = src;
+    this.playStartGain = g;
   }
 
-  /** 開始効果音を即停止（配当決定＝リール停止で呼ぶ） */
+  /** 開始効果音を徐々にフェードアウト（ライン音などと被る時用）。 */
+  fadeOutPlayStart(dur = 0.6): void {
+    if (!this.ctx || !this.playStartSrc) return;
+    if (this.playStartGain) {
+      const now = this.ctx.currentTime;
+      const g = this.playStartGain.gain;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0.0001, now + dur);
+    }
+    try { this.playStartSrc.stop(this.ctx.currentTime + dur + 0.05); } catch { /* noop */ }
+    this.playStartSrc = null;
+    this.playStartGain = null;
+  }
+
+  /** 開始効果音を即停止 */
   stopPlayStart(): void {
     if (!this.playStartSrc) return;
     try { this.playStartSrc.stop(); } catch { /* 既に停止済み */ }
     this.playStartSrc = null;
+    this.playStartGain = null;
   }
 
   /** 連鎖音（連鎖が伸びるほど高く） */

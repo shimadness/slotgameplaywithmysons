@@ -520,11 +520,12 @@ body::before {
   animation: lineMatchEmph 0.6s ease-out forwards;
   z-index: 2;
 }
-/* はっきり1回転（左回り）しながら浮き出て、最後は浮いたまま保持 */
+/* 縦(Y軸)を軸に左回りで1回転（ターンテーブル状）しながら浮き出て、浮いたまま保持。
+   perspective を前置きして3D回転を見せる。途中で裏返って見えるのは仕様。 */
 @keyframes lineMatchEmph {
-  0% { transform: scale(1) rotate(0deg) translateY(0); }
-  55% { transform: scale(1.32) rotate(-360deg) translateY(-11px); }
-  100% { transform: scale(1.22) rotate(-360deg) translateY(-7px); }
+  0% { transform: perspective(420px) scale(1) rotateY(0deg) translateY(0); }
+  55% { transform: perspective(420px) scale(1.32) rotateY(-360deg) translateY(-11px); }
+  100% { transform: perspective(420px) scale(1.22) rotateY(-360deg) translateY(-7px); }
 }
 
 .dcell.clearing .glyph {
@@ -1105,6 +1106,30 @@ body.rush-active .title h1 {
   .btn { padding: 11px 8px; font-size: 14px; }
   .btn.primary { font-size: 18px; }
 }
+
+/* ===== iOSネイティブアプリ専用レイアウト（html.native-ios で上書き） =====
+   目的: 3×3マスを大きく＝オッズ列を細く・操作ボタンを1行・ラッシュ告知を盤面下へ。
+   ※media query の .xxx より高specの html.native-ios で勝たせる（端末はphone幅前提） */
+html.native-ios .drop-stack {
+  /* オッズ列を細くしたぶん幅の差し引きを198→150に、上限も拡大 */
+  --dcell: min(116px, calc((100vw - 150px) / 3), calc((100dvh - 360px) / 4));
+}
+/* オッズ列を細く＝アイコンと×倍率を近づけ、余った幅を盤面に回す */
+html.native-ios .odds-panel { max-width: 118px; gap: 2px; padding-top: 14px; }
+html.native-ios .odds-row { padding: 1px 5px; gap: 3px; }
+html.native-ios .odds-right { padding-left: 4px; }
+/* セブンラッシュ告知＝3×3の下に全幅で */
+html.native-ios .drop-rush-rule {
+  margin-top: 8px;
+  max-width: none;
+  width: 100%;
+}
+/* SPIN＋AUTO＋BGMを1行に（ベット群だけ上の行で折り返し） */
+html.native-ios .bet-group { flex: 1 1 100%; }
+html.native-ios .controls > [data-spin-btn] { flex: 1 1 auto; }
+html.native-ios .controls > [data-auto-btn],
+html.native-ios .controls > [data-mute-btn],
+html.native-ios .controls > [data-refill-btn] { flex: 0 0 auto; }
 
 /* ===== ダブルアップ（DOUBLE UP CHALLENGE）====================== */
 .du-overlay {

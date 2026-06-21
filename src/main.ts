@@ -20,6 +20,7 @@ import { Hud } from "./ui/hud";
 import { DoubleUp } from "./ui/doubleup";
 import { haptics } from "./native/haptics";
 import { installFitScreen } from "./ui/fitScreen";
+import { Capacitor } from "@capacitor/core";
 import { ALL_SYMBOL_IDS, sym, type SymbolId } from "./game/symbols";
 
 type Mode = "drop" | "slot";
@@ -162,6 +163,14 @@ const hud = new Hud(state, {
 });
 app.querySelector(".cabinet")!.appendChild(hud.el);
 
+// iOSネイティブアプリ専用のレイアウト調整（CSSは html.native-ios で分岐）
+if (Capacitor.getPlatform() === "ios") {
+  document.documentElement.classList.add("native-ios");
+  // セブンラッシュ告知を「オッズ列の下」→「3×3グリッドの下（全幅）」へ移動
+  const rush = dropBoard.el.querySelector(".drop-rush-rule");
+  if (rush) dropBoard.el.appendChild(rush);
+}
+
 // 画面に必ず1画面で収める（小型端末/ネイティブWebView対策の安全網）
 installFitScreen(app.querySelector(".cabinet") as HTMLElement);
 
@@ -247,12 +256,12 @@ async function playDrop(): Promise<void> {
   let lineHits = 0; // このプレイで「ライン配当」が出た回数（コンボのみのステップは数えない）
   await dropBoard.run(result, {
     onReelStop: () => sfx.reelStop(),
-    onAllReelsStopped: () => { sfx.stopSpin(); sfx.stopPlayStart(); },
-    onReach: () => { sfx.reach(); void effects.banner("リーチ！", 900); },
+    onAllReelsStopped: () => sfx.stopSpin(), // 開始効果音はここで切らず最後まで流す
+    onReach: () => { sfx.fadeOutPlayStart(); sfx.reach(); void effects.banner("リーチ！", 900); },
     onStep: (step) => {
       sfx.chain(step.chain);
       // ライン配当が出た回数で音を出し分け（1回目→001 … 5回目以降→005）。連鎖の深さではない。
-      if (step.lineWins.length > 0) sfx.lineWin(++lineHits);
+      if (step.lineWins.length > 0) { sfx.fadeOutPlayStart(); sfx.lineWin(++lineHits); } // 被るので開始音はフェードアウト
       if (step.stepWin > 0) haptics.chain(step.chain);
       running += step.stepWin;
       state.lastWin = running;
