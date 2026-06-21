@@ -241,15 +241,18 @@ async function playDrop(): Promise<void> {
   const result = dropPlay(state.bet, undefined, inRush); // ラッシュ中は7大量プール
 
   sfx.startSpin();
+  sfx.playStart(); // ゲーム開始〜初回配当決定の効果音（リール停止でカット）
 
   let running = 0;
+  let lineHits = 0; // このプレイで「ライン配当」が出た回数（コンボのみのステップは数えない）
   await dropBoard.run(result, {
     onReelStop: () => sfx.reelStop(),
-    onAllReelsStopped: () => sfx.stopSpin(),
+    onAllReelsStopped: () => { sfx.stopSpin(); sfx.stopPlayStart(); },
     onReach: () => { sfx.reach(); void effects.banner("リーチ！", 900); },
     onStep: (step) => {
       sfx.chain(step.chain);
-      if (step.lineWins.length > 0) sfx.lineWin(step.chain); // ライン成立＝連鎖数別サンプル音
+      // ライン配当が出た回数で音を出し分け（1回目→001 … 5回目以降→005）。連鎖の深さではない。
+      if (step.lineWins.length > 0) sfx.lineWin(++lineHits);
       if (step.stepWin > 0) haptics.chain(step.chain);
       running += step.stepWin;
       state.lastWin = running;

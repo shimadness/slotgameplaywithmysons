@@ -36,7 +36,6 @@ export class DropBoard {
   private previewBadges: HTMLElement[][] = [];
   private oddsRows: Record<string, HTMLElement> = {};
   private oddsNext: Record<string, HTMLElement> = {}; // 「次の倍率」プレビュー
-  private fallScale = 1; // 落下アニメの時間倍率（ライン成立時のスローモーション用）
 
   constructor() {
     this.el = document.createElement("div");
@@ -111,9 +110,9 @@ export class DropBoard {
   private buildRushRule(): HTMLElement {
     const box = document.createElement("div");
     box.className = "drop-rush-rule";
-    box.innerHTML = `
-      <div class="rr-title"><span class="rr-7">7️⃣</span> セブンラッシュ</div>
-      <div class="rr-body">7️⃣が<b>3つ</b>そろうと<b>${SEVEN_RUSH_GAMES}ゲーム</b>突入。<br>“<b>7</b>”が大量に出て<b>高配当</b>のチャンス！</div>`;
+    // 電光掲示板風に1行で横スクロール。シームレスループ用に同じ文を2つ並べる。
+    const text = `7️⃣ <b>セブンラッシュ</b> ― 7️⃣が3つそろうと<b>${SEVEN_RUSH_GAMES}ゲーム</b>突入！“7”が大量に出て<b>高配当</b>のチャンス！`;
+    box.innerHTML = `<div class="rr-track"><span class="rr-seg">${text}</span><span class="rr-seg" aria-hidden="true">${text}</span></div>`;
     return box;
   }
 
@@ -254,7 +253,7 @@ export class DropBoard {
     const cell = this.cells[c][r];
     const glyph = this.glyphs[c][r];
     cell.dataset.sym = id;
-    cell.classList.remove("match", "clearing", "melting");
+    cell.classList.remove("match", "line-match", "clearing", "melting");
     cell.classList.toggle("wild5", wildLeft > 0 && !frozen);
     cell.classList.toggle("is-frozen", frozen);
     cell.classList.toggle("is-text", id === "bar" || id === "bar2" || id === "bar3" || id === "blue7" || id === "red7" || id === "gold7");
@@ -266,8 +265,8 @@ export class DropBoard {
     this.setBadge(this.badges[c][r], wildLeft);
     if (fromOffsetPx !== undefined && fromOffsetPx !== 0) {
       const cells = Math.abs(fromOffsetPx) / this.pitch();
-      const fallMs = Math.round(FALL_BASE_MS * Math.sqrt(cells) * this.fallScale);
-      const totalMs = fallMs + SQUASH_MS * this.fallScale;
+      const fallMs = Math.round(FALL_BASE_MS * Math.sqrt(cells));
+      const totalMs = fallMs + SQUASH_MS;
       const land = fallMs / totalMs;
       const drop = [
         { transform: `translateY(${fromOffsetPx}px) scaleX(1) scaleY(1)`, easing: "cubic-bezier(0.45,0,0.85,0.6)" },
@@ -314,18 +313,6 @@ export class DropBoard {
       for (let r = 0; r < ROWS; r++) {
         const off = from ? (from[c][r] - r) * this.pitch() : undefined;
         this.paintCell(c, r, grid[c][r], off, wild ? wild[c][r] : 0, frozen ? frozen[c][r] : false);
-      }
-  }
-
-  /** NEXT プレビューを空にする（スピン中の「次の出目」先出しを防ぐ） */
-  clearPreview(): void {
-    for (let c = 0; c < COLS; c++)
-      for (let idx = 0; idx < PREVIEW_ROWS; idx++) {
-        const cell = this.previewCells[c][idx];
-        cell.dataset.sym = "";
-        this.previewGlyphs[c][idx].textContent = "";
-        cell.classList.remove("wild5", "is-text");
-        this.setBadge(this.previewBadges[c][idx], 0);
       }
   }
 
@@ -419,11 +406,11 @@ export class DropBoard {
 
   // --- 役ハイライト（ライン＋コネクト） ------------------------------
   private highlight(step: CascadeStep): void {
-    // ライン役：セルを光らせる
+    // ライン役：セルを光らせる＋「揃った瞬間」の回転＋浮き出し演出（ラインのみ）
     for (const w of step.lineWins) {
       const color = dsym(w.symbol).color;
       for (const [c, r] of w.cells) {
-        this.cells[c][r].classList.add("match");
+        this.cells[c][r].classList.add("match", "line-match");
         this.cells[c][r].style.setProperty("--sym-color", color);
       }
     }
@@ -449,31 +436,25 @@ export class DropBoard {
   /** 1プレイ全体をアニメーション */
   async run(result: DropResult, cb: DropCallbacks = {}): Promise<void> {
     this.setOdds(result.oddsStart);
-    this.clearPreview(); // スピン中はNEXTを空に（ワイルド5の「5」など次の出目を先出ししない）
+    this.renderPreview(result.initialPreview); // 開始時点でNEXTに次の出目を表示（従来の動き）
     await this.spinIn(result.initial, result.initialWild, result.initialFrozen, cb);
-    this.renderPreview(result.initialPreview, true); // 盤面が止まってからNEXTを表示
     await wait(220);
 
     for (const step of result.steps) {
-      // ライン成立ステップは「ちょっとスローモーション」で見せる
-      const slow = step.lineWins.length > 0 ? 1.7 : 1;
-      this.fallScale = slow;
-      this.el.classList.toggle("slowmo", slow > 1);
+      // ライン成立時だけ「少しスロー」で揃ったマスを見せる（落下/消去は通常速度のまま）
+      const lineHit = step.lineWins.length > 0;
 
       this.highlight(step);
       // 隣接の役で溶ける氷をパキッと演出
       for (const [c, r] of step.melted) this.cells[c][r].classList.add("melting");
       cb.onStep?.(step);
-      await wait(560 * slow);
+      await wait(lineHit ? 780 : 560); // 揃った瞬間のみ少しため（回転＋浮き出し演出を見せる）
       this.setOdds(step.oddsAfter); // 上昇ぶんがだるま落とし風にロール
       this.markClearing(step);
-      await wait(300 * slow);
+      await wait(300);
       this.setGrid(step.gridAfter, step.from, step.wildAfter, step.frozenAfter);
       this.renderPreview(step.previewAfter, true);
-      await wait(MAX_DROP_MS * slow + 120);
-
-      this.fallScale = 1;
-      this.el.classList.remove("slowmo");
+      await wait(MAX_DROP_MS + 120);
     }
   }
 }

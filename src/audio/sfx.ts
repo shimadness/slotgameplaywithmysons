@@ -9,12 +9,16 @@ const lineWinUrls = [
   new URL("./lineAttack4.wav", import.meta.url).href,
   new URL("./lineAttack5.wav", import.meta.url).href,
 ];
+// ゲーム開始〜初回配当決定の間に流す効果音（リール停止でカット）
+const playStartUrl = new URL("./gamePlayStart.wav", import.meta.url).href;
 
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private spinNodes: { osc: OscillatorNode; gain: GainNode } | null = null;
   private lineWinBufs: (AudioBuffer | null)[] = [null, null, null, null, null];
+  private playStartBuf: AudioBuffer | null = null;
+  private playStartSrc: AudioBufferSourceNode | null = null;
   private samplesLoading = false;
   muted = false;
 
@@ -38,18 +42,19 @@ export class Sfx {
   private async loadSamples(): Promise<void> {
     if (!this.ctx || this.lineWinBufs[0] || this.samplesLoading) return;
     this.samplesLoading = true;
+    const load = async (url: string): Promise<AudioBuffer | null> => {
+      try {
+        const res = await fetch(url);
+        return await this.ctx!.decodeAudioData(await res.arrayBuffer());
+      } catch {
+        return null; // 失敗しても静かに無効化
+      }
+    };
     try {
-      await Promise.all(
-        lineWinUrls.map(async (url, i) => {
-          try {
-            const res = await fetch(url);
-            const arr = await res.arrayBuffer();
-            this.lineWinBufs[i] = await this.ctx!.decodeAudioData(arr);
-          } catch {
-            // 1音源だけ失敗しても他は鳴らす
-          }
-        })
-      );
+      await Promise.all([
+        ...lineWinUrls.map(async (url, i) => { this.lineWinBufs[i] = await load(url); }),
+        (async () => { this.playStartBuf = await load(playStartUrl); })(),
+      ]);
     } finally {
       this.samplesLoading = false;
     }
@@ -173,6 +178,27 @@ export class Sfx {
     g.gain.value = 0.8; // master(0.35)経由。大きすぎ/小さすぎはここで調整
     src.connect(g).connect(this.out);
     src.start();
+  }
+
+  /** ゲーム開始〜初回配当決定の効果音を再生（1回）。リール停止で stopPlayStart() で切る。 */
+  playStart(): void {
+    if (!this.ctx || !this.out || !this.playStartBuf) return;
+    this.stopPlayStart(); // 多重再生防止
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.playStartBuf;
+    const g = this.ctx.createGain();
+    g.gain.value = 0.7; // master(0.35)経由。音量はここで調整
+    src.connect(g).connect(this.out);
+    src.onended = () => { if (this.playStartSrc === src) this.playStartSrc = null; };
+    src.start();
+    this.playStartSrc = src;
+  }
+
+  /** 開始効果音を即停止（配当決定＝リール停止で呼ぶ） */
+  stopPlayStart(): void {
+    if (!this.playStartSrc) return;
+    try { this.playStartSrc.stop(); } catch { /* 既に停止済み */ }
+    this.playStartSrc = null;
   }
 
   /** 連鎖音（連鎖が伸びるほど高く） */

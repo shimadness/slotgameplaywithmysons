@@ -86,7 +86,7 @@ export class DoubleUp {
 
     this.updateMeters();
     this.setBetButtons(true);
-    this.msg("ダブルアップ！ COLLECT / 半分 / 全部 を えらんでね");
+    this.msg(""); // 説明文は出さない（ボタンを見て操作できるUIにする）
   }
 
   private setBetButtons(enabled: boolean): void {
@@ -143,7 +143,7 @@ export class DoubleUp {
   // ---- 3箇所から選ぶフェーズ ---------------------------------------
   private goPick(): void {
     this.phase = "pick";
-    this.msg("3つの中から ディーラーより強い目を えらべ！");
+    this.msg(""); // 説明文は出さず、光って跳ねる「pickable」リールで「ここを選ぶ」を見せる
     this.selectBtns.forEach((b) => (b.disabled = false));
     this.reelEls.forEach((r) => r.classList.add("pickable"));
   }
