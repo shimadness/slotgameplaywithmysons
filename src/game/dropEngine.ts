@@ -415,7 +415,8 @@ export function play(bet: number, oddsCarry?: Record<string, number>, rush = fal
   );
   // ワイルド5：最初の3×3には出さず、ここで初回NEXT枠に最大1個だけ注入
   // （1ゲーム1回まで。落下するのは役成立でその列が空いた時）
-  if (Math.random() < WILD_SPAWN_CHANCE) {
+  // ラッシュ中は出さない（7大量＋オッズ上昇に重なって勝ちすぎるため）。
+  if (!rush && Math.random() < WILD_SPAWN_CHANCE) {
     const col = (Math.random() * COLS) | 0;
     streams[col][0] = "wild";
   }

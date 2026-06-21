@@ -69,7 +69,8 @@ app.appendChild(doubleUp.el);
 // RUSH（フリースピン）中だけは自動 COLLECT（ダブルアップをスキップ）。
 async function resolveWin(win: number): Promise<void> {
   if (win <= 0) return;
-  if (state.inRush) {
+  // 既に上限超のWINはダブルアップに入れず自動COLLECT（ダブルアップは価値>UPPER_CAPで強制終了のため入口でも弾く）
+  if (state.inRush || win > UPPER_CAP) {
     state.addWin(win);
     hud.animateWin(win);
     return;

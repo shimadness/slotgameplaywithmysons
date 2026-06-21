@@ -316,6 +316,18 @@ export class DropBoard {
       }
   }
 
+  /** NEXT プレビューを空にする（スピン中の「次の出目」先出しを防ぐ） */
+  clearPreview(): void {
+    for (let c = 0; c < COLS; c++)
+      for (let idx = 0; idx < PREVIEW_ROWS; idx++) {
+        const cell = this.previewCells[c][idx];
+        cell.dataset.sym = "";
+        this.previewGlyphs[c][idx].textContent = "";
+        cell.classList.remove("wild5", "is-text");
+        this.setBadge(this.previewBadges[c][idx], 0);
+      }
+  }
+
   renderPreview(preview: DSym[][], animate = false): void {
     for (let c = 0; c < COLS; c++)
       for (let idx = 0; idx < PREVIEW_ROWS; idx++) {
@@ -436,8 +448,9 @@ export class DropBoard {
   /** 1プレイ全体をアニメーション */
   async run(result: DropResult, cb: DropCallbacks = {}): Promise<void> {
     this.setOdds(result.oddsStart);
-    this.renderPreview(result.initialPreview);
+    this.clearPreview(); // スピン中はNEXTを空に（ワイルド5の「5」など次の出目を先出ししない）
     await this.spinIn(result.initial, result.initialWild, result.initialFrozen, cb);
+    this.renderPreview(result.initialPreview, true); // 盤面が止まってからNEXTを表示
     await wait(220);
 
     for (const step of result.steps) {
