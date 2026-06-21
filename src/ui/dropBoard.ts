@@ -36,6 +36,7 @@ export class DropBoard {
   private previewBadges: HTMLElement[][] = [];
   private oddsRows: Record<string, HTMLElement> = {};
   private oddsNext: Record<string, HTMLElement> = {}; // 「次の倍率」プレビュー
+  private fallScale = 1; // 落下アニメの時間倍率（ライン成立時のスローモーション用）
 
   constructor() {
     this.el = document.createElement("div");
@@ -265,8 +266,8 @@ export class DropBoard {
     this.setBadge(this.badges[c][r], wildLeft);
     if (fromOffsetPx !== undefined && fromOffsetPx !== 0) {
       const cells = Math.abs(fromOffsetPx) / this.pitch();
-      const fallMs = Math.round(FALL_BASE_MS * Math.sqrt(cells));
-      const totalMs = fallMs + SQUASH_MS;
+      const fallMs = Math.round(FALL_BASE_MS * Math.sqrt(cells) * this.fallScale);
+      const totalMs = fallMs + SQUASH_MS * this.fallScale;
       const land = fallMs / totalMs;
       const drop = [
         { transform: `translateY(${fromOffsetPx}px) scaleX(1) scaleY(1)`, easing: "cubic-bezier(0.45,0,0.85,0.6)" },
@@ -454,17 +455,25 @@ export class DropBoard {
     await wait(220);
 
     for (const step of result.steps) {
+      // ライン成立ステップは「ちょっとスローモーション」で見せる
+      const slow = step.lineWins.length > 0 ? 1.7 : 1;
+      this.fallScale = slow;
+      this.el.classList.toggle("slowmo", slow > 1);
+
       this.highlight(step);
       // 隣接の役で溶ける氷をパキッと演出
       for (const [c, r] of step.melted) this.cells[c][r].classList.add("melting");
       cb.onStep?.(step);
-      await wait(560);
+      await wait(560 * slow);
       this.setOdds(step.oddsAfter); // 上昇ぶんがだるま落とし風にロール
       this.markClearing(step);
-      await wait(300);
+      await wait(300 * slow);
       this.setGrid(step.gridAfter, step.from, step.wildAfter, step.frozenAfter);
       this.renderPreview(step.previewAfter, true);
-      await wait(MAX_DROP_MS + 120);
+      await wait(MAX_DROP_MS * slow + 120);
+
+      this.fallScale = 1;
+      this.el.classList.remove("slowmo");
     }
   }
 }

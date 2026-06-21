@@ -249,7 +249,7 @@ async function playDrop(): Promise<void> {
     onReach: () => { sfx.reach(); void effects.banner("リーチ！", 900); },
     onStep: (step) => {
       sfx.chain(step.chain);
-      if (step.lineWins.length > 0) sfx.lineWin(); // ライン成立＝サンプル音
+      if (step.lineWins.length > 0) sfx.lineWin(step.chain); // ライン成立＝連鎖数別サンプル音
       if (step.stepWin > 0) haptics.chain(step.chain);
       running += step.stepWin;
       state.lastWin = running;

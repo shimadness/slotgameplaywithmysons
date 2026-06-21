@@ -504,6 +504,13 @@ body::before {
 @keyframes clearOut {
   to { transform: scale(0.1) rotate(40deg); opacity: 0; }
 }
+/* ライン成立時のスローモーション：消去をゆっくり見せる */
+.drop-stack.slowmo .dcell.clearing .glyph {
+  animation-duration: 0.5s;
+}
+.drop-stack.slowmo .dcell.match {
+  animation-duration: 0.7s;
+}
 
 /* 連鎖ポップ */
 .chain-pop {

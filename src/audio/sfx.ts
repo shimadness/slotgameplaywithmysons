@@ -1,13 +1,20 @@
 // ===== 効果音エンジン（Web Audio・基本は合成音＋一部サンプル） ========
 
-// ライン成立音（サンプル）。Viteが本番でハッシュ付きURLに解決する。
-const lineWinUrl = new URL("./lineWin.wav", import.meta.url).href;
+// ライン成立音（サンプル）。連鎖1回目〜5回目で出し分け、5以降は5を継続。
+// Viteが本番でハッシュ付きURLに解決する。
+const lineWinUrls = [
+  new URL("./lineAttack1.wav", import.meta.url).href,
+  new URL("./lineAttack2.wav", import.meta.url).href,
+  new URL("./lineAttack3.wav", import.meta.url).href,
+  new URL("./lineAttack4.wav", import.meta.url).href,
+  new URL("./lineAttack5.wav", import.meta.url).href,
+];
 
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private spinNodes: { osc: OscillatorNode; gain: GainNode } | null = null;
-  private lineWinBuf: AudioBuffer | null = null;
+  private lineWinBufs: (AudioBuffer | null)[] = [null, null, null, null, null];
   private samplesLoading = false;
   muted = false;
 
@@ -29,14 +36,20 @@ export class Sfx {
 
   /** サンプル音源を遅延ロード（初回ユーザー操作後）。失敗しても静かに無効化。 */
   private async loadSamples(): Promise<void> {
-    if (!this.ctx || this.lineWinBuf || this.samplesLoading) return;
+    if (!this.ctx || this.lineWinBufs[0] || this.samplesLoading) return;
     this.samplesLoading = true;
     try {
-      const res = await fetch(lineWinUrl);
-      const arr = await res.arrayBuffer();
-      this.lineWinBuf = await this.ctx.decodeAudioData(arr);
-    } catch {
-      // デコード不可な環境では鳴らさない（合成音は別途鳴る）
+      await Promise.all(
+        lineWinUrls.map(async (url, i) => {
+          try {
+            const res = await fetch(url);
+            const arr = await res.arrayBuffer();
+            this.lineWinBufs[i] = await this.ctx!.decodeAudioData(arr);
+          } catch {
+            // 1音源だけ失敗しても他は鳴らす
+          }
+        })
+      );
     } finally {
       this.samplesLoading = false;
     }
@@ -148,11 +161,14 @@ export class Sfx {
     this.tone(130, 0.6, "sawtooth", { gain: 0.2 });
   }
 
-  /** ライン成立音（サンプル再生）。未ロード/ミュート時は無音。 */
-  lineWin(): void {
-    if (!this.ctx || !this.out || !this.lineWinBuf) return;
+  /** ライン成立音（サンプル再生）。連鎖回数で1〜5を出し分け、5以降は5。未ロード/ミュート時は無音。 */
+  lineWin(chain = 1): void {
+    if (!this.ctx || !this.out) return;
+    const idx = Math.min(Math.max(chain, 1), 5) - 1; // 1→0 … 5以降→4
+    const buf = this.lineWinBufs[idx];
+    if (!buf) return;
     const src = this.ctx.createBufferSource();
-    src.buffer = this.lineWinBuf;
+    src.buffer = buf;
     const g = this.ctx.createGain();
     g.gain.value = 0.8; // master(0.35)経由。大きすぎ/小さすぎはここで調整
     src.connect(g).connect(this.out);
