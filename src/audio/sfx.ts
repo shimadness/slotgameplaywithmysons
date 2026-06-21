@@ -1,9 +1,14 @@
-// ===== 効果音エンジン（Web Audio・ファイル不要の合成音） ===========
+// ===== 効果音エンジン（Web Audio・基本は合成音＋一部サンプル） ========
+
+// ライン成立音（サンプル）。Viteが本番でハッシュ付きURLに解決する。
+const lineWinUrl = new URL("./lineWin.wav", import.meta.url).href;
 
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private spinNodes: { osc: OscillatorNode; gain: GainNode } | null = null;
+  private lineWinBuf: AudioBuffer | null = null;
+  private samplesLoading = false;
   muted = false;
 
   /** ユーザー操作後に一度だけ呼ぶ（自動再生ポリシー対策） */
@@ -19,6 +24,22 @@ export class Sfx {
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === "suspended") void this.ctx.resume();
+    void this.loadSamples();
+  }
+
+  /** サンプル音源を遅延ロード（初回ユーザー操作後）。失敗しても静かに無効化。 */
+  private async loadSamples(): Promise<void> {
+    if (!this.ctx || this.lineWinBuf || this.samplesLoading) return;
+    this.samplesLoading = true;
+    try {
+      const res = await fetch(lineWinUrl);
+      const arr = await res.arrayBuffer();
+      this.lineWinBuf = await this.ctx.decodeAudioData(arr);
+    } catch {
+      // デコード不可な環境では鳴らさない（合成音は別途鳴る）
+    } finally {
+      this.samplesLoading = false;
+    }
   }
 
   setMuted(m: boolean): void {
@@ -125,6 +146,17 @@ export class Sfx {
     const notes = [523, 659, 784, 1046, 1318];
     notes.forEach((f, i) => this.tone(f, 0.25, "triangle", { gain: 0.4, delay: i * 0.08 }));
     this.tone(130, 0.6, "sawtooth", { gain: 0.2 });
+  }
+
+  /** ライン成立音（サンプル再生）。未ロード/ミュート時は無音。 */
+  lineWin(): void {
+    if (!this.ctx || !this.out || !this.lineWinBuf) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.lineWinBuf;
+    const g = this.ctx.createGain();
+    g.gain.value = 0.8; // master(0.35)経由。大きすぎ/小さすぎはここで調整
+    src.connect(g).connect(this.out);
+    src.start();
   }
 
   /** 連鎖音（連鎖が伸びるほど高く） */

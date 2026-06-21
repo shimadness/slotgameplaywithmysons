@@ -18,6 +18,8 @@ import { DropBoard } from "./ui/dropBoard";
 import { Effects } from "./ui/effects";
 import { Hud } from "./ui/hud";
 import { DoubleUp } from "./ui/doubleup";
+import { haptics } from "./native/haptics";
+import { installFitScreen } from "./ui/fitScreen";
 import { ALL_SYMBOL_IDS, sym, type SymbolId } from "./game/symbols";
 
 type Mode = "drop" | "slot";
@@ -159,6 +161,9 @@ const hud = new Hud(state, {
 });
 app.querySelector(".cabinet")!.appendChild(hud.el);
 
+// 画面に必ず1画面で収める（小型端末/ネイティブWebView対策の安全網）
+installFitScreen(app.querySelector(".cabinet") as HTMLElement);
+
 // ---- モード切替 ----------------------------------------------------
 app.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -219,6 +224,7 @@ async function playDrop(): Promise<void> {
   sfx.resume();
   if (!state.canSpin()) {
     sfx.deny();
+    haptics.deny();
     if (!state.inRush) void effects.banner("メダル不足", 1200);
     return;
   }
@@ -228,6 +234,7 @@ async function playDrop(): Promise<void> {
   state.lastWin = 0;
   state.placeBet();
   hud.update();
+  haptics.spin();
 
   const inRush = state.inRush; // このスピン開始時点でラッシュ中か
   const result = dropPlay(state.bet, undefined, inRush); // ラッシュ中は7大量プール
@@ -241,6 +248,8 @@ async function playDrop(): Promise<void> {
     onReach: () => { sfx.reach(); void effects.banner("リーチ！", 900); },
     onStep: (step) => {
       sfx.chain(step.chain);
+      if (step.lineWins.length > 0) sfx.lineWin(); // ライン成立＝サンプル音
+      if (step.stepWin > 0) haptics.chain(step.chain);
       running += step.stepWin;
       state.lastWin = running;
       hud.update();
@@ -260,14 +269,15 @@ async function playDrop(): Promise<void> {
     state.lastWin = running;
     hud.update();
     sfx.bonus();
+    haptics.bonus();
     await effects.banner(`コンボ ${result.maxChain}連鎖  ×${result.comboMult}  +${result.comboPay}`, 1300);
   }
 
   if (result.totalWin > 0) {
     const big = result.totalWin >= state.totalBet * 30 || result.maxChain >= 5;
     effects.popWin(result.totalWin, big);
-    if (big) sfx.winBig();
-    else sfx.winSmall();
+    if (big) { sfx.winBig(); haptics.winBig(); }
+    else { sfx.winSmall(); haptics.winSmall(); }
     // ラッシュ中は自動collectなので短め、通常はダブルアップ前に余韻(+1秒)
     await wait(inRush ? (big ? 700 : 400) : (big ? 1900 : 1500));
     await resolveWin(result.totalWin); // ラッシュ中は自動collect / 通常はダブルアップ
@@ -283,6 +293,7 @@ async function playDrop(): Promise<void> {
     state.startRush(SEVEN_RUSH_GAMES, 1);
     enterRushFx();
     sfx.bonus();
+    haptics.rush();
     await effects.banner(`★ セブンラッシュ 突入！ ${SEVEN_RUSH_GAMES}ゲーム ★`, 1900);
     hud.update();
   }
@@ -324,6 +335,7 @@ async function playSlot(): Promise<void> {
   sfx.resume();
   if (!state.canSpin()) {
     sfx.deny();
+    haptics.deny();
     if (!state.inRush) void effects.banner("メダル不足", 1200);
     return;
   }
@@ -333,6 +345,7 @@ async function playSlot(): Promise<void> {
   state.lastWin = 0;
   state.placeBet();
   hud.update();
+  haptics.spin();
 
   const { grid, stops } = engine.spin();
   const multiplier = state.inRush ? state.rushMultiplier : 1;
@@ -396,8 +409,8 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
     const big = ev.total >= state.totalBet * 15;
     effects.sparkleForWins(ev);
     effects.popWin(ev.total, big);
-    if (big) sfx.winBig();
-    else sfx.winSmall();
+    if (big) { sfx.winBig(); haptics.winBig(); }
+    else { sfx.winSmall(); haptics.winSmall(); }
     if (state.inRush) rushWinTotal += ev.total;
     await wait(big ? 2000 : 1600); // WIN を見せてからダブルアップへ（+1秒）
     await resolveWin(ev.total); // ダブルアップ → addWin（RUSH中は自動collect）
