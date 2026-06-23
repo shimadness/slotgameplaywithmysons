@@ -10,6 +10,42 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- 起動エラー可視化（黒画面デバッグ用。原因特定したら削除予定） -->
+    <div
+      id="boot-error"
+      style="position: fixed; inset: 0; z-index: 99999; display: none; padding: 16px; padding-top: 60px; margin: 0; overflow: auto; color: #ffd2d2; background: #240010; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word;"
+    ></div>
+    <script>
+      (function () {
+        function show(label, info) {
+          var d = document.getElementById("boot-error");
+          if (!d) return;
+          d.style.display = "block";
+          d.textContent += "[" + label + "] " + info + "\n\n";
+        }
+        window.addEventListener(
+          "error",
+          function (e) {
+            // リソース読込失敗（script/asset の 404 など）も拾う
+            if (e.target && e.target !== window && (e.target.src || e.target.href)) {
+              show("load-failed", (e.target.tagName || "") + " " + (e.target.src || e.target.href));
+              return;
+            }
+            show(
+              "error",
+              (e.message || e.type) +
+                "\n" + (e.filename || "") + ":" + (e.lineno || "") + ":" + (e.colno || "") +
+                "\n" + ((e.error && e.error.stack) || "")
+            );
+          },
+          true
+        );
+        window.addEventListener("unhandledrejection", function (e) {
+          var r = e.reason || {};
+          show("promise", (r && (r.stack || r.message)) || String(r));
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
