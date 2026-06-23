@@ -55,13 +55,15 @@
           try {
             var cab = document.querySelector(".cabinet");
             if (!cab) { diagBanner.textContent = "no .cabinet"; return; }
-            var r = cab.getBoundingClientRect();
+            var prevZoom = cab.style.zoom;
+            cab.style.zoom = ""; // 素のサイズを測る
+            var nat = cab.getBoundingClientRect();
+            cab.style.zoom = prevZoom;
             diagBanner.textContent =
               "ih=" + window.innerHeight + " iw=" + window.innerWidth +
-              " | zoom=" + (cab.style.zoom || "(none)") +
-              " | cabH=" + Math.round(r.height) + " cabW=" + Math.round(r.width) +
-              " top=" + Math.round(r.top) + " left=" + Math.round(r.left) +
-              " | vis=" + (r.height > 50 && r.width > 50) +
+              " clientW=" + document.documentElement.clientWidth +
+              " | mq560=" + window.matchMedia("(max-width:560px)").matches +
+              " | natW=" + Math.round(nat.width) + " natH=" + Math.round(nat.height) +
               " | ios=" + (document.documentElement.className.indexOf("native-ios") >= 0);
           } catch (err) {
             diagBanner.textContent = "DIAG-failed " + err;

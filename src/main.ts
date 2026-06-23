@@ -172,7 +172,9 @@ if (Capacitor.getPlatform() === "ios") {
 }
 
 // 画面に必ず1画面で収める（zoom方式・堅牢版）
-installFitScreen(app.querySelector(".cabinet") as HTMLElement);
+// ★メディアクエリ確認のため一時OFF（盤面を出す）。確定後に戻す。
+const ENABLE_FIT_SCREEN = false;
+if (ENABLE_FIT_SCREEN) installFitScreen(app.querySelector(".cabinet") as HTMLElement);
 
 // ---- モード切替 ----------------------------------------------------
 app.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {
