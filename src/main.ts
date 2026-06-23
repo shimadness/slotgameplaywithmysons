@@ -172,7 +172,9 @@ if (Capacitor.getPlatform() === "ios") {
 }
 
 // 画面に必ず1画面で収める（小型端末/ネイティブWebView対策の安全網）
-installFitScreen(app.querySelector(".cabinet") as HTMLElement);
+// ★iOS黒画面の切り分け用に一時OFF（盤面が出ればスケーラーが犯人）。原因特定後に true へ戻す。
+const ENABLE_FIT_SCREEN = false;
+if (ENABLE_FIT_SCREEN) installFitScreen(app.querySelector(".cabinet") as HTMLElement);
 
 // ---- モード切替 ----------------------------------------------------
 app.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {

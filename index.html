@@ -44,6 +44,30 @@
           var r = e.reason || {};
           show("promise", (r && (r.stack || r.message)) || String(r));
         });
+        // 黒画面の時だけ状態をダンプ（Webインスペクタ不要の現地診断）
+        setTimeout(function () {
+          try {
+            var app = document.getElementById("app");
+            var cab = document.querySelector(".cabinet");
+            var rect = cab ? cab.getBoundingClientRect() : null;
+            if (rect && rect.height > 50) return; // 正常表示なら何も出さない
+            var info = {
+              appHTMLlen: app ? app.innerHTML.length : -1,
+              cabinet: !!cab,
+              cabRect: rect ? { w: Math.round(rect.width), h: Math.round(rect.height), top: Math.round(rect.top), left: Math.round(rect.left) } : null,
+              cabTransform: cab ? getComputedStyle(cab).transform : null,
+              cabDisplay: cab ? getComputedStyle(cab).display : null,
+              bodyHeight: document.body.style.height || "(auto)",
+              bodyOverflow: getComputedStyle(document.body).overflow,
+              innerH: window.innerHeight,
+              innerW: window.innerWidth,
+              htmlClass: document.documentElement.className,
+            };
+            show("DIAG", JSON.stringify(info, null, 2));
+          } catch (err) {
+            show("DIAG-failed", String(err));
+          }
+        }, 1500);
       })();
     </script>
     <script type="module" src="/src/main.ts"></script>
