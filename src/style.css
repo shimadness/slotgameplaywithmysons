@@ -1118,11 +1118,18 @@ html.native-ios .drop-stack {
 html.native-ios .odds-panel { max-width: 118px; gap: 2px; padding-top: 14px; }
 html.native-ios .odds-row { padding: 1px 5px; gap: 3px; }
 html.native-ios .odds-right { padding-left: 4px; }
-/* セブンラッシュ告知＝3×3の下に全幅で */
+/* セブンラッシュ告知＝3×3の下に全幅で。
+   重要: マーキーのトラック(同文2連=約760px)が flex の min-content として盤面幅を
+   押し広げ、横760pxはみ出し→スケーラー過剰縮小→画面外へ飛ぶ不具合があった。
+   align-self:stretch でコンテナ幅に合わせ、min-width:0 で押し広げを止め、
+   overflow:hidden(既存)でトラックをクリップする。 */
 html.native-ios .drop-rush-rule {
   margin-top: 8px;
-  max-width: none;
-  width: 100%;
+  align-self: center;
+  min-width: 0;
+  /* 中身(マーキーのトラック)に関係なくビューポート幅を絶対に超えない硬い上限 */
+  width: calc(100vw - 40px);
+  max-width: calc(100vw - 40px);
 }
 /* SPIN＋AUTO＋BGMを1行に（ベット群だけ上の行で折り返し） */
 html.native-ios .bet-group { flex: 1 1 100%; }
