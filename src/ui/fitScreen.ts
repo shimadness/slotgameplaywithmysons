@@ -1,57 +1,48 @@
-// 画面フィット：キャビネット全体を表示域に合わせて縮小し、必ず1画面に収める。
-// 方式 = CSS `zoom`。transform:scale と違い「レイアウトごと」縮むので、body の高さ操作や
-// overflow:hidden が不要＝iOS WebView で真っ暗になる不具合（負スケール/高さ0）が原理的に起きない。
-// zoom は WebKit(Safari/iOS)・Chrome で動作。縮小のみ（拡大はしない）。
+// 画面フィット：キャビネット全体を表示域に収まるよう CSS `zoom` で縮小する。
+// 堅牢版：毎回 zoom を解除して「素のサイズ」を測り直す（割り算で素サイズを推定しないので
+// iOS でのスパイラル縮小＝真っ暗化を防ぐ）。ResizeObserver の自己発火は ignore フラグで抑止。
+// scale には下限を設け、万一の異常値でも消えないようにする。
 export function installFitScreen(cabinet: HTMLElement): void {
-  let raf = 0;
-  let applied = 1; // 現在あてている zoom 値
+  let ignoreRO = false;
 
   const measure = (): void => {
-    raf = 0;
+    if (ignoreRO) return; // 自分の zoom 変更で起きた再計測は無視（ループ防止）
     const vh = window.innerHeight;
     const vw = window.innerWidth;
-    // 起動直後にビューポート未確定(0)なら何もしない（後続の再計測に回す）
-    if (vh <= 0 || vw <= 0) return;
+    if (vh <= 0 || vw <= 0) return; // ビューポート未確定なら後続に回す
 
-    // zoom を当てたまま現在サイズを測り、applied で割って「素のサイズ」を得る
-    // （毎回 zoom をリセットして測ると ResizeObserver が無限に発火するため）
+    ignoreRO = true;
+    // いったん素に戻して自然サイズを測る（割り算推定しない＝確実）
+    if (cabinet.style.zoom) cabinet.style.zoom = "";
     const rect = cabinet.getBoundingClientRect();
-    if (rect.height <= 0 || rect.width <= 0) return;
-    const naturalH = rect.height / applied;
-    const naturalW = rect.width / applied;
+    const naturalH = rect.height;
+    const naturalW = rect.width;
 
-    const cs = getComputedStyle(document.body);
-    const padV = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-    const padH = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    if (naturalH > 0 && naturalW > 0) {
+      const cs = getComputedStyle(document.body);
+      const padV = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const padH = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      let scale = Math.min(1, (vh - padV) / naturalH, (vw - padH) / naturalW);
+      if (!Number.isFinite(scale) || scale <= 0) scale = 1;
+      scale = Math.max(scale, 0.4); // 下限＝異常時でも真っ暗にしない
+      cabinet.style.zoom = scale < 0.999 ? String(scale) : "";
+    }
 
-    const scale = Math.min(1, (vh - padV) / naturalH, (vw - padH) / naturalW);
-    if (!Number.isFinite(scale) || scale <= 0) return; // 異常値は適用しない
-
-    const target = scale < 0.999 ? scale : 1;
-    if (Math.abs(target - applied) < 0.004) return; // 変化なし＝再適用しない（ループ防止）
-
-    applied = target;
-    cabinet.style.zoom = target === 1 ? "" : String(target);
+    // 自己発火する ResizeObserver をやり過ごしてから監視再開
+    setTimeout(() => { ignoreRO = false; }, 60);
   };
 
-  // rAF はバックグラウンドタブ等で止まることがあるため、タイマー直叩きも併用して
-  // 「measure が一度も走らない」を防ぐ。
-  const schedule = (): void => {
-    if (!raf) raf = requestAnimationFrame(measure);
-  };
-
-  schedule();
-  window.addEventListener("resize", schedule);
-  window.addEventListener("orientationchange", schedule);
-  window.addEventListener("load", measure); // iOS WebView がサイズ確定する頃に再計測
+  measure();
+  window.addEventListener("resize", measure);
+  window.addEventListener("orientationchange", measure);
+  window.addEventListener("load", measure);
   document.addEventListener("visibilitychange", measure);
   const fonts = (document as { fonts?: { ready?: Promise<unknown> } }).fonts;
   if (fonts?.ready) void fonts.ready.then(measure);
-  // 盤面の中身が増減（モード切替/ラッシュ）で素のサイズが変わったら測り直す
-  new ResizeObserver(schedule).observe(cabinet);
-  // 起動直後の未確定サイズの回収＝rAFに頼らず直接 measure を複数回叩く
-  setTimeout(measure, 100);
-  setTimeout(measure, 400);
-  setTimeout(measure, 900);
-  setTimeout(measure, 1600);
+  new ResizeObserver(measure).observe(cabinet);
+  // 起動直後の未確定サイズの回収（rAFに頼らずタイマー直叩き）
+  setTimeout(measure, 150);
+  setTimeout(measure, 500);
+  setTimeout(measure, 1100);
+  setTimeout(measure, 2000);
 }

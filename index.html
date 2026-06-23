@@ -44,39 +44,31 @@
           var r = e.reason || {};
           show("promise", (r && (r.stack || r.message)) || String(r));
         });
-        // 実機メトリクスを上部バナーに常時表示（原因確定用）。zoom が rect に効くかも測る。
-        setTimeout(function () {
+        // スケーラー適用後の状態をバナー表示（消えても読めるよう notch の下に置く）。
+        var diagBanner = document.createElement("div");
+        diagBanner.style.cssText =
+          "position:fixed;left:0;right:0;z-index:99998;top:env(safe-area-inset-top,0);" +
+          "background:rgba(10,0,20,.92);color:#9ff;font:11px/1.4 ui-monospace,monospace;" +
+          "padding:6px;white-space:pre-wrap;pointer-events:none;";
+        document.body.appendChild(diagBanner);
+        function dumpDiag() {
           try {
             var cab = document.querySelector(".cabinet");
-            if (!cab) { show("DIAG", "no .cabinet"); return; }
-            var nat = cab.getBoundingClientRect();
-            // WebKit で zoom が getBoundingClientRect に反映されるか実測
-            var prevZoom = cab.style.zoom;
-            cab.style.zoom = "0.5";
-            var zoomed = cab.getBoundingClientRect();
-            cab.style.zoom = prevZoom;
-            var zoomAffectsRect = Math.abs(zoomed.height - nat.height) > 5;
-
-            var padCs = getComputedStyle(document.body);
-            var padV = parseFloat(padCs.paddingTop) + parseFloat(padCs.paddingBottom);
-            var wouldScale = Math.min(1, (window.innerHeight - padV) / nat.height);
-
-            var b = document.createElement("div");
-            b.style.cssText =
-              "position:fixed;top:0;left:0;right:0;z-index:99998;" +
-              "background:rgba(10,0,20,.92);color:#9ff;font:11px/1.4 ui-monospace,monospace;" +
-              "padding:4px 6px;white-space:pre-wrap;pointer-events:none;";
-            b.textContent =
+            if (!cab) { diagBanner.textContent = "no .cabinet"; return; }
+            var r = cab.getBoundingClientRect();
+            diagBanner.textContent =
               "ih=" + window.innerHeight + " iw=" + window.innerWidth +
-              " natH=" + Math.round(nat.height) + " natW=" + Math.round(nat.width) +
-              " | zoom→rect=" + (zoomAffectsRect ? "YES" : "NO") +
-              " | wouldScale=" + wouldScale.toFixed(3) +
+              " | zoom=" + (cab.style.zoom || "(none)") +
+              " | cabH=" + Math.round(r.height) + " cabW=" + Math.round(r.width) +
+              " top=" + Math.round(r.top) + " left=" + Math.round(r.left) +
+              " | vis=" + (r.height > 50 && r.width > 50) +
               " | ios=" + (document.documentElement.className.indexOf("native-ios") >= 0);
-            document.body.appendChild(b);
           } catch (err) {
-            show("DIAG-failed", String(err));
+            diagBanner.textContent = "DIAG-failed " + err;
           }
-        }, 1500);
+        }
+        setTimeout(dumpDiag, 1500);
+        setTimeout(dumpDiag, 2600);
       })();
     </script>
     <script type="module" src="/src/main.ts"></script>
