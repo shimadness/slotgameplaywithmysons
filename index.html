@@ -10,69 +10,6 @@
   </head>
   <body>
     <div id="app"></div>
-    <!-- 起動エラー可視化（黒画面デバッグ用。原因特定したら削除予定） -->
-    <div
-      id="boot-error"
-      style="position: fixed; inset: 0; z-index: 99999; display: none; padding: 16px; padding-top: 60px; margin: 0; overflow: auto; color: #ffd2d2; background: #240010; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word;"
-    ></div>
-    <script>
-      (function () {
-        function show(label, info) {
-          var d = document.getElementById("boot-error");
-          if (!d) return;
-          d.style.display = "block";
-          d.textContent += "[" + label + "] " + info + "\n\n";
-        }
-        window.addEventListener(
-          "error",
-          function (e) {
-            // リソース読込失敗（script/asset の 404 など）も拾う
-            if (e.target && e.target !== window && (e.target.src || e.target.href)) {
-              show("load-failed", (e.target.tagName || "") + " " + (e.target.src || e.target.href));
-              return;
-            }
-            show(
-              "error",
-              (e.message || e.type) +
-                "\n" + (e.filename || "") + ":" + (e.lineno || "") + ":" + (e.colno || "") +
-                "\n" + ((e.error && e.error.stack) || "")
-            );
-          },
-          true
-        );
-        window.addEventListener("unhandledrejection", function (e) {
-          var r = e.reason || {};
-          show("promise", (r && (r.stack || r.message)) || String(r));
-        });
-        // スケーラー適用後の状態をバナー表示（消えても読めるよう notch の下に置く）。
-        var diagBanner = document.createElement("div");
-        diagBanner.style.cssText =
-          "position:fixed;left:0;right:0;z-index:99998;top:env(safe-area-inset-top,0);" +
-          "background:rgba(10,0,20,.92);color:#9ff;font:11px/1.4 ui-monospace,monospace;" +
-          "padding:6px;white-space:pre-wrap;pointer-events:none;";
-        document.body.appendChild(diagBanner);
-        function dumpDiag() {
-          try {
-            var cab = document.querySelector(".cabinet");
-            if (!cab) { diagBanner.textContent = "no .cabinet"; return; }
-            var prevZoom = cab.style.zoom;
-            cab.style.zoom = ""; // 素のサイズを測る
-            var nat = cab.getBoundingClientRect();
-            cab.style.zoom = prevZoom;
-            diagBanner.textContent =
-              "ih=" + window.innerHeight + " iw=" + window.innerWidth +
-              " clientW=" + document.documentElement.clientWidth +
-              " | mq560=" + window.matchMedia("(max-width:560px)").matches +
-              " | natW=" + Math.round(nat.width) + " natH=" + Math.round(nat.height) +
-              " | ios=" + (document.documentElement.className.indexOf("native-ios") >= 0);
-          } catch (err) {
-            diagBanner.textContent = "DIAG-failed " + err;
-          }
-        }
-        setTimeout(dumpDiag, 1500);
-        setTimeout(dumpDiag, 2600);
-      })();
-    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
