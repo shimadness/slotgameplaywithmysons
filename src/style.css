@@ -20,6 +20,8 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  /* スケーラーで1画面に収めた後の、わずかな縦バウンス/スクロールを抑止 */
+  overscroll-behavior: none;
 }
 
 body {
