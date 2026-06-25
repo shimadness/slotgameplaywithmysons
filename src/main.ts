@@ -163,13 +163,24 @@ const hud = new Hud(state, {
 });
 app.querySelector(".cabinet")!.appendChild(hud.el);
 
-// ネイティブアプリ（iOS/Android）共通のレイアウト調整（CSSは html.native-app で分岐）
+// ネイティブアプリ（iOS/Android）＋ PWAスタンドアロン 共通のレイアウト調整（CSSは html.native-app で分岐）
 const capPlatform = Capacitor.getPlatform();
-if (capPlatform !== "web") {
-  document.documentElement.classList.add("native-app", `native-${capPlatform}`);
+const isStandalonePWA =
+  window.matchMedia?.("(display-mode: standalone)").matches === true ||
+  (navigator as unknown as { standalone?: boolean }).standalone === true;
+if (capPlatform !== "web" || isStandalonePWA) {
+  document.documentElement.classList.add("native-app");
+  if (capPlatform !== "web") document.documentElement.classList.add(`native-${capPlatform}`);
   // セブンラッシュ告知を「オッズ列の下」→「3×3グリッドの下（全幅）」へ移動
   const rush = dropBoard.el.querySelector(".drop-rush-rule");
   if (rush) dropBoard.el.appendChild(rush);
+}
+
+// PWA: Service Worker 登録（ホーム画面インストール＋オフライン対応）。ネイティブ(Capacitor)では不要。
+if (capPlatform === "web" && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {/* 失敗しても通常動作 */});
+  });
 }
 
 // 画面に必ず1画面で収める（zoom方式・堅牢版）

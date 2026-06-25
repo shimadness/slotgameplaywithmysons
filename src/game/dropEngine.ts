@@ -69,8 +69,9 @@ export const DSYMBOLS: Record<DSym, DSymDef> = {
 };
 
 /** 氷（凍結）出現率＝新しい全体RTPダイヤル。凍ったセルは溶けるまで役に使えない
- *  （隣接セルが役成立で溶ける）。出現率を上げるほど実効マッチ率↓＝RTP↓。rtpで較正。 */
-export let FREEZE_RATE = 0.5;
+ *  （隣接セルが役成立で溶ける）。出現率を上げるほど実効マッチ率↓＝RTP↓。rtpで較正。
+ *  0.5(平均4.5/9=盤面半分)は「初期氷が多すぎ」とのユーザー指摘で 0.3(平均≒2.7/9)へ。 */
+export let FREEZE_RATE = 0.3;
 export function setFreezeRate(x: number): void { FREEZE_RATE = x; }
 function freezeRoll(): boolean { return Math.random() < FREEZE_RATE; }
 

@@ -1,0 +1,17 @@
+{
+  "name": "TRIPLE SLOT",
+  "short_name": "TRIPLE SLOT",
+  "description": "3×3落ちもの×スロット。回して揃えて高配当を狙え！",
+  "lang": "ja",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070a1e",
+  "theme_color": "#070a1e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
