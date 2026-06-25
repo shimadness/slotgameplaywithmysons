@@ -163,9 +163,10 @@ const hud = new Hud(state, {
 });
 app.querySelector(".cabinet")!.appendChild(hud.el);
 
-// iOSネイティブアプリ専用のレイアウト調整（CSSは html.native-ios で分岐）
-if (Capacitor.getPlatform() === "ios") {
-  document.documentElement.classList.add("native-ios");
+// ネイティブアプリ（iOS/Android）共通のレイアウト調整（CSSは html.native-app で分岐）
+const capPlatform = Capacitor.getPlatform();
+if (capPlatform !== "web") {
+  document.documentElement.classList.add("native-app", `native-${capPlatform}`);
   // セブンラッシュ告知を「オッズ列の下」→「3×3グリッドの下（全幅）」へ移動
   const rush = dropBoard.el.querySelector(".drop-rush-rule");
   if (rush) dropBoard.el.appendChild(rush);

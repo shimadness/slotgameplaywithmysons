@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "rtp": "npx tsx rtp.mjs",
     "sync": "npm run build && npx cap sync",
-    "ios": "npm run build && npx cap sync ios && npx cap open ios"
+    "ios": "npm run build && npx cap sync ios && npx cap open ios",
+    "android": "npm run build && npx cap sync android && npx cap open android"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
@@ -22,6 +23,7 @@
     "esbuild@0.21.5": true
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
     "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.4.1",
     "@capacitor/haptics": "^8.0.2",

@@ -1109,23 +1109,23 @@ body.rush-active .title h1 {
   .btn.primary { font-size: 18px; }
 }
 
-/* ===== iOSネイティブアプリ専用レイアウト（html.native-ios で上書き） =====
+/* ===== iOSネイティブアプリ専用レイアウト（html.native-app で上書き） =====
    目的: 3×3マスを大きく＝オッズ列を細く・操作ボタンを1行・ラッシュ告知を盤面下へ。
-   ※media query の .xxx より高specの html.native-ios で勝たせる（端末はphone幅前提） */
-html.native-ios .drop-stack {
+   ※media query の .xxx より高specの html.native-app で勝たせる（端末はphone幅前提） */
+html.native-app .drop-stack {
   /* オッズ列を細くしたぶん幅の差し引きを198→150に、上限も拡大 */
   --dcell: min(116px, calc((100vw - 150px) / 3), calc((100dvh - 360px) / 4));
 }
 /* オッズ列を細く＝アイコンと×倍率を近づけ、余った幅を盤面に回す */
-html.native-ios .odds-panel { max-width: 118px; gap: 2px; padding-top: 14px; }
-html.native-ios .odds-row { padding: 1px 5px; gap: 3px; }
-html.native-ios .odds-right { padding-left: 4px; }
+html.native-app .odds-panel { max-width: 118px; gap: 2px; padding-top: 14px; }
+html.native-app .odds-row { padding: 1px 5px; gap: 3px; }
+html.native-app .odds-right { padding-left: 4px; }
 /* セブンラッシュ告知＝3×3の下に全幅で。
    重要: マーキーのトラック(同文2連=約760px)が flex の min-content として盤面幅を
    押し広げ、横760pxはみ出し→スケーラー過剰縮小→画面外へ飛ぶ不具合があった。
    align-self:stretch でコンテナ幅に合わせ、min-width:0 で押し広げを止め、
    overflow:hidden(既存)でトラックをクリップする。 */
-html.native-ios .drop-rush-rule {
+html.native-app .drop-rush-rule {
   margin-top: 8px;
   align-self: center;
   min-width: 0;
@@ -1134,11 +1134,11 @@ html.native-ios .drop-rush-rule {
   max-width: calc(100vw - 40px);
 }
 /* SPIN＋AUTO＋BGMを1行に（ベット群だけ上の行で折り返し） */
-html.native-ios .bet-group { flex: 1 1 100%; }
-html.native-ios .controls > [data-spin-btn] { flex: 1 1 auto; }
-html.native-ios .controls > [data-auto-btn],
-html.native-ios .controls > [data-mute-btn],
-html.native-ios .controls > [data-refill-btn] { flex: 0 0 auto; }
+html.native-app .bet-group { flex: 1 1 100%; }
+html.native-app .controls > [data-spin-btn] { flex: 1 1 auto; }
+html.native-app .controls > [data-auto-btn],
+html.native-app .controls > [data-mute-btn],
+html.native-app .controls > [data-refill-btn] { flex: 0 0 auto; }
 
 /* ===== ダブルアップ（DOUBLE UP CHALLENGE）====================== */
 .du-overlay {
