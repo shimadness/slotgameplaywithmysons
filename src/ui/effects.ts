@@ -13,22 +13,27 @@ export class Effects {
   constructor(private root: HTMLElement, private board: Board) {
     this.layer = document.createElement("div");
     this.layer.className = "fx-layer";
+    this.root.appendChild(this.layer);
+    // パーティクルcanvasは fit-scaler の zoom 対象外にするため body直下・全画面fixed に置く
+    // （machine内に置くと zoom と canvasバッファがズレて、紙吹雪が変な位置に残って見えた）。
     this.canvas = document.createElement("canvas");
     this.canvas.className = "fx-canvas";
-    this.root.appendChild(this.canvas);
-    this.root.appendChild(this.layer);
+    this.canvas.style.cssText =
+      "position:fixed;inset:0;width:100vw;height:100vh;z-index:10;pointer-events:none;";
+    document.body.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d")!;
     this.resize();
     window.addEventListener("resize", () => this.resize());
   }
 
+  /** 全画面ビューポート基準でバッファを合わせる（zoom非対象なので暴走しない）。 */
   private resize(): void {
-    const r = this.root.getBoundingClientRect();
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (w === 0 || h === 0) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.canvas.width = r.width * dpr;
-    this.canvas.height = r.height * dpr;
-    this.canvas.style.width = `${r.width}px`;
-    this.canvas.style.height = `${r.height}px`;
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
@@ -107,7 +112,8 @@ export class Effects {
 
   /** 紙吹雪/きらめきを噴射 */
   burst(count = 80, colors?: string[]): void {
-    const r = this.root.getBoundingClientRect();
+    // canvas 自身の現在サイズ基準で発射（描画バッファの論理座標と一致＝位置ズレ防止）
+    const r = this.canvas.getBoundingClientRect();
     const palette =
       colors ?? ["#ffe14a", "#ff5c7a", "#4fc3ff", "#3ddc84", "#b06bff", "#fff"];
     for (let i = 0; i < count; i++) {
