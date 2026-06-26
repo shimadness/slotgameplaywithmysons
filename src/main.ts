@@ -11,7 +11,7 @@ import {
   type SpinEvaluation,
 } from "./game/paylines";
 import { play as dropPlay, DSYMBOLS, BASE_SYMS, SEVEN_RUSH_GAMES, type DSym } from "./game/dropEngine";
-import { DU_LADDER, SPECIAL_BONUS, UPPER_CAP, duGlyph, duColor } from "./game/doubleup";
+import { DU_LADDER, SPECIAL_BONUS, duGlyph, duColor } from "./game/doubleup";
 import { Sfx } from "./audio/sfx";
 import { Board } from "./ui/board";
 import { DropBoard } from "./ui/dropBoard";
@@ -70,8 +70,8 @@ app.appendChild(doubleUp.el);
 // RUSH（フリースピン）中だけは自動 COLLECT（ダブルアップをスキップ）。
 async function resolveWin(win: number): Promise<void> {
   if (win <= 0) return;
-  // 既に上限超のWINはダブルアップに入れず自動COLLECT（ダブルアップは価値>UPPER_CAPで強制終了のため入口でも弾く）
-  if (state.inRush || win > UPPER_CAP) {
+  // RUSH（フリースピン）中だけ自動COLLECT。それ以外は金額に関わらずダブルアップへ（上限なし）。
+  if (state.inRush) {
     state.addWin(win);
     hud.animateWin(win);
     return;
@@ -346,9 +346,8 @@ async function finishDropRush(): Promise<void> {
   await effects.banner(`セブンラッシュ 終了！ 獲得 ${total.toLocaleString()}`, 2400);
 
   // 総獲得メダルでダブルアップに突入。total はラッシュ中に加算済みなので、
-  // 一旦戻して「賭ける元手」にし、ダブルアップ結果(final)を改めて反映する。
-  // （UPPER_CAP超は元々ダブルアップ不可なのでそのまま確定）
-  if (total > 0 && total <= UPPER_CAP) {
+  // 一旦戻して「賭ける元手」にし、ダブルアップ結果(final)を改めて反映する（上限なし）。
+  if (total > 0) {
     busy = true;
     hud.setBusy(true);
     state.credits -= total; // lastWin は触らずメダルだけ戻す（overlayで隠れる）
@@ -638,7 +637,7 @@ function buildPaytable(): void {
       <h3 class="pt-h">③ ダブルアップ（両モード共通）</h3>
       <div class="pt-modes">
         <p>WIN後に挑戦できます。ディーラーの目より<b>強い目を3つの中から当てれば配当2倍</b>。<b>COLLECT</b>（降りる）／<b>半分かける</b>（残りはSAVEで確保）／<b>全部かける</b>から選べます（価値1のときは半分不可）。</p>
-        <p>3つすべて同じ目が出ると<b>スペシャルボーナス</b>で強制終了。価値が <b>${UPPER_CAP.toLocaleString()}</b> を超えると強制COLLECT。</p>
+        <p>3つすべて同じ目が出ると<b>スペシャルボーナス</b>で強制終了。<b>上限なし</b>＝勝てば何度でも挑戦できます（負けると賭けた分は没収）。</p>
       </div>
       <p class="pt-sub">スペシャルボーナス（BET倍率）</p>
       <div class="pt-chips">${duBonus}</div>

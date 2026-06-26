@@ -8,7 +8,6 @@ import type { Sfx } from "../audio/sfx";
 import {
   DU_LADDER,
   SPECIAL_BONUS,
-  UPPER_CAP,
   rank,
   beatsDealer,
   dealRound,
@@ -209,16 +208,11 @@ export class DoubleUp {
     if (won) {
       this.atRisk *= 2;
       this.updateMeters();
-      const total = this.atRisk + this.save;
       const big = this.atRisk >= 1000;
       big ? this.sfx.winBig() : this.sfx.winSmall();
-      if (total > UPPER_CAP) {
-        this.msg(`WIN！ 上限 ${UPPER_CAP.toLocaleString()} 突破で強制 COLLECT`);
-        window.setTimeout(() => this.finish(total), 1600);
-      } else {
-        this.msg("WIN！ もう一度いける！");
-        window.setTimeout(() => this.beginRound(), 1100);
-      }
+      // 上限なし：勝てば何度でも続行（COLLECT はユーザーが選ぶ）
+      this.msg("WIN！ もう一度いける！");
+      window.setTimeout(() => this.beginRound(), 1100);
     } else {
       this.atRisk = 0;
       const total = this.save;
