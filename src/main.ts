@@ -344,6 +344,23 @@ async function finishDropRush(): Promise<void> {
   sfx.winBig();
   effects.burst(160);
   await effects.banner(`セブンラッシュ 終了！ 獲得 ${total.toLocaleString()}`, 2400);
+
+  // 総獲得メダルでダブルアップに突入。total はラッシュ中に加算済みなので、
+  // 一旦戻して「賭ける元手」にし、ダブルアップ結果(final)を改めて反映する。
+  // （UPPER_CAP超は元々ダブルアップ不可なのでそのまま確定）
+  if (total > 0 && total <= UPPER_CAP) {
+    busy = true;
+    hud.setBusy(true);
+    state.credits -= total; // lastWin は触らずメダルだけ戻す（overlayで隠れる）
+    state.save();
+    const final = await doubleUp.start(total, state.bet);
+    state.addWin(final);
+    hud.animateWin(final);
+    busy = false;
+    hud.setBusy(false);
+    hud.update();
+  }
+
   maybeAutoNext();
 }
 
