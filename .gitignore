@@ -4,3 +4,5 @@ dist/
 *.log
 .vite/
 docs/history/
+android/.idea/
+dist-apk/

@@ -1,14 +1,27 @@
 // ===== ゲーム状態（プレイヤー別 クレジット / ベット / RUSH / 設定） ===
-import { LINE_COUNT } from "./paylines";
 import { DEFAULT_SETTEI, SETTEI_RTP } from "./drop";
 
-export const LINE_BETS = [1, 2, 3, 5, 10] as const;
+// ベット段（× FIVE_REEL_UNIT がクレジットの TOTAL BET）。
+// 最大 500×20 = 10000（DROP の上限と揃える＝ランキング動線）。
+export const LINE_BETS = [1, 2, 3, 5, 10, 20, 50, 100, 200, 500] as const;
 export type LineBet = (typeof LINE_BETS)[number];
 
-// DROP モードのベット（1BET/10BET/100BET で増減・0〜500の単一ベット）
-// 0始まりなので 10BET→10, 20→20 とキリの良い額にできる。0ではSPIN不可。
+// 5リール（TENGU KING化）の単一ベット単位。配当は小数倍率(0.05刻み)なので、
+// 「ベット段 × この単位」をクレジットベットにすると払い出しが整数になる。
+// RTPはベット非依存（pay×bet と cost×bet で相殺）なので額面のみに作用する。
+const FIVE_REEL_UNIT = 20;
+
+// DROP モードのベット。5リールと同じ「BET▲で巡回 / MAX」式のプリセット段。
 export const DROP_BET_MIN = 0;
-export const DROP_BET_MAX = 500;
+export const DROP_BET_MAX = 10000;
+/** DROPのベット段（BET▲で次の段へ巡回）。 */
+export const DROP_BETS = [10, 50, 100, 500, 1000, 5000, 10000] as const;
+const DROP_BET_DEFAULT = 100;
+/** 任意値を「その値以下の最大プリセット」に丸める（旧セーブ値の吸着用）。 */
+function snapDropBet(v: number): number {
+  const found = [...DROP_BETS].reverse().find((p) => p <= v);
+  return found ?? DROP_BETS[0];
+}
 
 // --- プレイヤー（3人分の別々のセーブ）-------------------------------
 export const PLAYER_IDS = ["p1", "p2", "p3"] as const;
@@ -22,6 +35,7 @@ const START_CREDITS = 3000;
 
 const SAVE_PREFIX = "triple-slot.save."; // + playerId
 const META_KEY = "triple-slot.meta"; // 名前 + 直近プレイヤー
+const DU_KEY = "triple-slot.du"; // ダブルアップ ON/OFF（キャビネット共通）
 
 interface PlayerSave {
   credits: number;
@@ -61,7 +75,7 @@ export class GameState {
   playerId: PlayerId = "p1";
   credits = START_CREDITS;
   lineBetIndex = 0; // LINE_BETS のインデックス（5リール用）
-  dropBet = DROP_BET_MIN; // DROPモードの単一ベット（1〜500）
+  dropBet = DROP_BET_DEFAULT; // DROPモードの単一ベット（DROP_BETS のいずれか）
   settei = DEFAULT_SETTEI; // （旧）ペイアウト率設定。DROPは固定配当化で未使用、5リール用に残置
   /** 現在モード。ベット構造が変わる（drop=1BET単一 / slot=10ライン）。 */
   mode: "drop" | "slot" = "drop";
@@ -77,10 +91,15 @@ export class GameState {
 
   lastWin = 0;
 
+  /** ダブルアップ ON/OFF（キャビネット共通設定・保存）。OFFなら勝利を自動COLLECT。 */
+  duEnabled = true;
+
   /** まだ誰も選んでいない（初回）なら true */
   firstRun = false;
 
   constructor() {
+    const du = readJSON<boolean>(DU_KEY);
+    this.duEnabled = typeof du === "boolean" ? du : true;
     const meta = readJSON<MetaSave>(META_KEY);
     if (meta?.names) this.names = { ...DEFAULT_NAMES, ...meta.names };
     if (meta?.current && PLAYER_IDS.includes(meta.current)) {
@@ -126,6 +145,12 @@ export class GameState {
     this.saveMeta();
   }
 
+  /** ダブルアップ ON/OFF を切替（保存）。 */
+  setDuEnabled(on: boolean): void {
+    this.duEnabled = on;
+    writeJSON(DU_KEY, on);
+  }
+
   /** 名前変更 */
   setName(id: PlayerId, name: string): void {
     const trimmed = name.trim().slice(0, 12) || DEFAULT_NAMES[id];
@@ -145,8 +170,8 @@ export class GameState {
 
   get totalBet(): number {
     // DROPは「1BET=全ライン有効」の単一ベット（dropBet そのもの）。
-    // 5リールは10ラインなので従来どおり lineBet × LINE_COUNT。
-    return this.mode === "drop" ? this.dropBet : this.lineBet * LINE_COUNT;
+    // 5リールは単一ベット（ベット段 × FIVE_REEL_UNIT クレジット）。
+    return this.mode === "drop" ? this.dropBet : this.lineBet * FIVE_REEL_UNIT;
   }
 
   cycleLineBet(): void {
@@ -155,13 +180,41 @@ export class GameState {
   }
 
   setMaxBet(): void {
-    this.lineBetIndex = LINE_BETS.length - 1;
+    // 「いま張れる最大の段」を選ぶ（所持で買えない段は選ばない＝canSpinで弾かれない）。
+    // どの段も買えない（所持 < 最小TOTAL BET）場合は最小段（index 0）。
+    let idx = 0;
+    for (let i = 0; i < LINE_BETS.length; i++) {
+      if (LINE_BETS[i] * FIVE_REEL_UNIT <= this.credits) idx = i;
+    }
+    this.lineBetIndex = idx;
     this.save();
   }
 
-  /** DROPベットを n だけ増やす（上限500でクランプ）。 */
+  /** DROPベットを次のプリセット段へ巡回（5リールのBET▲と同方式）。 */
+  cycleDropBet(): void {
+    const next = DROP_BETS.find((v) => v > this.dropBet);
+    this.dropBet = next ?? DROP_BETS[0];
+    this.save();
+  }
+
+  /** DROPベットを「いま張れる最大のプリセット段」にする（買えなければ最小段）。 */
+  setDropMaxBet(): void {
+    const affordable = [...DROP_BETS].reverse().find((v) => v <= this.credits);
+    this.dropBet = affordable ?? DROP_BETS[0];
+    this.save();
+  }
+
+  /** （旧UI用・未使用）DROPベットを n だけ増やす。 */
   addBet(n: number): void {
     this.dropBet = Math.min(DROP_BET_MAX, Math.max(DROP_BET_MIN, this.dropBet + n));
+    this.save();
+  }
+
+  /** DROPベットを「いま張れる最大」にする（所持メダルぶん・上限 DROP_BET_MAX）。
+      所持より多く張ると canSpin が弾くので、affordable な上限に丸める。 */
+  betDropMax(): void {
+    const affordable = Math.floor(this.credits);
+    this.dropBet = Math.min(DROP_BET_MAX, Math.max(DROP_BET_MIN, affordable));
     this.save();
   }
 
@@ -263,9 +316,9 @@ export class GameState {
       typeof s?.settei === "number"
         ? Math.min(6, Math.max(1, Math.round(s.settei)))
         : DEFAULT_SETTEI;
-    this.dropBet =
-      typeof s?.dropBet === "number"
-        ? Math.min(DROP_BET_MAX, Math.max(DROP_BET_MIN, Math.round(s.dropBet)))
-        : DROP_BET_MIN;
+    // 旧セーブの任意値はプリセット段に吸着（BET▲/MAX 巡回式に統一）。
+    this.dropBet = snapDropBet(
+      typeof s?.dropBet === "number" ? Math.round(s.dropBet) : DROP_BET_DEFAULT
+    );
   }
 }

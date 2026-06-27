@@ -15,9 +15,9 @@ src/
     dropEngine.ts    ★現行3×3エンジン（8ライン＋コネクト＋コンボ＋氷＋7ラッシュ）
     doubleup.ts      ダブルアップの純ロジック（ラダー/勝敗/スペシャル/上限）
     drop.ts          旧3×3クラスターエンジン（※5リール用に残置・DROPは未使用）
-    symbols.ts       5リールのシンボル定義・配当倍率・出現重み
-    paylines.ts      5リール10ライン定義と当たり判定
-    engine.ts        リール帯生成・抽選
+    symbols.ts       5リールのシンボル定義（和・天狗テーマ）・配当倍率・出現重み
+    paylines.ts      5リール 左詰め全リール評価＋ワイルド花火倍率（TENGU KING型）
+    engine.ts        リール帯生成・抽選（固定シード・通常/フリー2帯）
     state.ts         クレジット/ベット/RUSH状態・localStorage保存
   audio/
     sfx.ts           Web Audio 効果音エンジン（音源ファイル不要）
@@ -92,6 +92,8 @@ cherry🍒 / orange🍊 / plum🍇 / banana🍌 / melon🍈 / bell🔔 / BAR / B
 
 #### ダブルアップ（DOUBLE UP CHALLENGE / `game/doubleup.ts`＋`ui/doubleup.ts`）
 - WIN後に挑戦（通常時のみ。AUTO中も移行／RUSHフリースピン中は自動collectでスキップ）。
+- **ON/OFFトグル**（HUDの「ダブル ON/OFF」ボタン・`state.duEnabled`・localStorage `triple-slot.du` に保存）。
+  OFF時は `resolveWin` が**全勝利を自動COLLECT**（ダブルアップに入らない）。両モード共通。
 - **COLLECT / 半分かける(セーブ) / 全部かける** を選択（価値1のとき半分不可）。
   - 半分: `floor(atRisk/2)` をSAVEへ退避し残りで勝負。全部: atRisk全額（SAVEは安全）。
 - ベット選択後に**ディーラーがスピンして目を決定**→3箇所から1つ選ぶ。
@@ -101,10 +103,13 @@ cherry🍒 / orange🍊 / plum🍇 / banana🍌 / melon🍈 / bell🔔 / BAR / B
 - 値モデル: `atRisk`(勝負にさらす)＋`save`(ロック・負けても残る)。COLLECT WIN=atRisk+save / NEXT=atRisk*2+save。
 - WIN→ダブルアップ移行まで余韻あり（drop: big1900/小1500ms）。BARはセルに収まるよう縮小表示(`.is-bar`)。
 
-#### ベット（DROP専用・`state.ts`）
-- **1BET / 10BET / 100BET 加算 ＋ クリア**（`dropBet` 0〜500、`DROP_BET_MIN/MAX`）。
-  `totalBet`(drop)=dropBet（単一ベット＝全ライン有効）。**ベット0ではSPIN不可**（`canSpin` で totalBet≥1）。
-- 5リールは従来の `BET▲/MAX`（lineBet 1/2/3/5/10）。HUDがモード別にベットUIを切替。
+#### ベット（両モード共通 UI・`state.ts`）
+- **`BET ▲`（次の段へ巡回）＋ `MAX BET`（張れる最大の段）の2ボタンに統一**（5リールの形をDROPにも採用）。
+  - DROP段：`DROP_BETS = [10,50,100,500,1000,5000,10000]`（`cycleDropBet`/`setDropMaxBet`、既定100）。旧セーブ値は `snapDropBet` でプリセットに吸着。
+  - 5リール段：`lineBet 1/2/3/5/10`（`cycleLineBet`/`setMaxBet`）。`totalBet=lineBet×FIVE_REEL_UNIT(20)`。
+  - `MAX BET` は「いま所持で張れる最大段」を選ぶ（買えない段は選ばない＝canSpinで弾かれない）。
+  - `totalBet`(drop)=dropBet。**ベット0ではSPIN不可**（`canSpin` で totalBet≥1）。
+- 旧DROPの 1/10/100/1000BET＋MAX＋クリア ボタン群は撤去（HUDで非表示）。`betMeter`(BET/LINE)も両モード非表示。
 
 #### オッズ列UI（`dropBoard.buildOddsPanel`）
 - スロット右側に各シンボルの**現在オッズ**を縦並び。最上段に **gold7 ×1000(固定)**。
@@ -130,14 +135,43 @@ const SQUASH_MS = 140;     // 着地時の潰れ＆復帰
 
 ---
 
-### ② 5リール本格派（`src/game/paylines.ts`, `src/ui/board.ts`）
+### ② 5リール — TENGU KING 型（和・天狗テーマ / `src/game/paylines.ts`, `src/game/engine.ts`）
 
-- 5リール × 3段 / 10ライン
-- 左から連続で揃うと配当
-- **スキャッター** 3個以上で RUSH（フリースピン）突入
-  - 3個 → 10回・×2 / 4個 → 15回・×3 / 5個 → 20回・×5
-- **リーチ演出**: 4本目停止時に「2スキャッター」or「高配当4連」でリーチ検出  
-  → 最終リールを引き伸ばして点滅＋緊張音
+> コナミ「フィーチャープレミアム TENGU KING」型へ刷新。設計詳細は `docs/TENGU_KING_DESIGN.md`。
+
+#### 評価 ＝ 左詰め全リール方式（`paylines.ts evaluate`）
+- 5リール × 3段。**10本固定ラインは廃止**。
+- 「**各シンボルがリール1（最左）から連続して何リールに出たか**」で配当（行は不問）。
+  **2個そろいから配当**（`pay[2]` あり）。`pay[count] × bet`（ライン数・ways数は乗じない）。
+- 同一シンボルは1回のみ計上。天狗（旧スキャッター）は本判定の対象外。
+
+#### シンボル（和・天狗テーマ・`symbols.ts`）
+小判🪙 / 扇🪭 / 巻物📜 / 徳利🍶 / 鈴🔔 / だるま🎴 / 招き猫🐱 / 千両箱💰 ／
+**打ち出の小槌🔨（ワイルド）** ／ **天狗👺（フリーゲーム突入トリガー）**。
+- 配当は **0.05刻みの小数倍率**（RTP≈96%。`bet` は段×`FIVE_REEL_UNIT(20)` で払い出しは整数）。
+
+#### ワイルド花火（×N倍率・TENGU KING 名物）
+- **ワイルドは「天狗フリーゲーム中だけ」出る**（通常ゲームには一切出ない）。リール2〜4のみ・複数同時可。
+- 役割①通常の代用ワイルドカード／②各ワイルドが ×2 or ×3 を持ち、**盤面の全ワイルドの倍率を
+  掛け合わせて総配当に乗算**（例: ×2/×3/×2 → 総配当×12）。当たりに参加してなくても乗る。
+- 花火は `baseWin>0` のときだけ。演出 `effects.wildShow()`（セルに×Nバッジ＋放射花火）。
+
+#### 天狗フリーゲーム（`state` の RUSH 基盤を流用）
+- **天狗3個以上**で突入（突入率≈0.1%＝レア）。付与スピン **3個=8 / 4個=15 / 5個=25**。
+- フリー中は**フラット倍率なし**。代わりに**ワイルド多めの専用帯**（`engine.setFreeMode`＋`board.setStrips`）
+  で花火を多発させ大量獲得。**リトリガーあり**（フリー中の天狗3個で上乗せ）。
+- 突入演出 `effects.freeGameIntro()`（👺全画面オーバーレイ＝突入ムービーのプレースホルダ）。
+- **説明マーキー**：盤面下に天狗フリーゲームの説明を電光掲示板風に横スクロール（`.tengu-free-rule`／
+  DROPのセブンラッシュ説明 `.drop-rush-rule` と同方式：`.rr-track` の同文2連を `-50%` 流してループ）。
+  5リールモード時のみ表示（`main.ts` でモード連動トグル）。
+
+#### リール帯（`engine.ts`）
+- 帯は**固定シード生成**＝全プレイヤー共通（RTP安定）。重み比例の正確枚数で構成＋決定的シャッフル。
+- 通常帯/フリー帯の2セット。出目のランダム性は `spin()` の停止位置で担保。
+
+#### RTP（`rtp_5reel.mjs`）
+- 多数セッション平均ハーネス。実測 **RTP≈96.4%**（セッション間95〜98%で均一）。
+- フリー突入率0.098%・フリー配当寄与7.3%・単スピン最大≈4385×ベット。
 
 #### 5リール回転アニメ（`src/ui/board.ts`）
 - **rAF ループ** + `easeOutQuart` イージングで本物っぽい減速
@@ -185,8 +219,9 @@ const SQUASH_MS = 140;     // 着地時の潰れ＆復帰
   - 初回（`current` 未設定）は `firstRun=true` → 起動時にプレイヤー選択を表示。
   - `setName(id, name)`（12文字まで）、`allPlayers()`/`peekCredits(id)` で選択画面に残高表示。
   - サーバー無し構成のため **クレジットは端末ごとに保存**（端末間同期はしない）。
-- **ベットはモード別**：DROP=`dropBet`(0〜500・1/10/100BET加算＋クリア、`totalBet=dropBet`)／
-  5リール=`lineBet`(1/2/3/5/10循環、`totalBet=lineBet×10`)。`bet` ゲッターが配当倍率用の単位を返す。
+- **ベットは両モード共通の `BET▲`巡回＋`MAX BET`**：DROP=`dropBet`（`DROP_BETS` の段・`totalBet=dropBet`）／
+  5リール=`lineBet 1/2/3/5/10` 巡回 × `FIVE_REEL_UNIT(20)`＝`totalBet`。
+  5リールは小数配当(0.05刻み)×20で払い出しは整数。「BET/LINE」メーターは両モードとも非表示（TOTAL BETのみ）。
 - **`placeBet()` はベット消費を即 `save()`**（スピン演出中・ダブルアップ中にリロードされても
   ベットが巻き戻らない＝タダ回し防止。2026-06-21修正）。
 - 残高不足時 → HUD に「+1000補充」ボタン表示。`canSpin()` は `totalBet≥1 && credits≥totalBet`。
@@ -253,6 +288,9 @@ const SQUASH_MS = 140;     // 着地時の潰れ＆復帰
   発光・ぼかし・粒子を抑制する方針（メモに手順あり）。
 - ペイアウト率（RTP）は固定配当＋氷ダイヤルで設計。dropEngine 用の常設RTPハーネスは未整備
   （旧 `rtp.mjs` は旧 drop.ts 用）。構造変更時は使い捨てスクリプトで実測する運用。
+- **5リール TENGU KING 残ポリッシュ（任意）**: ワイルド花火/突入演出の実アセット化（Lottie/動画。
+  フックは敷設済 `effects.wildShow` / `effects.freeGameIntro`）／専用SE／キャビネット全体の和テーマCSS。
+  詳細は `docs/TENGU_KING_DESIGN.md` §9。最終RTP目標値（現状96.4%）の確定も残課題。
 
 ---
 

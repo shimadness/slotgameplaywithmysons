@@ -5,10 +5,12 @@ export interface HudHandlers {
   onSpin: () => void;
   onBet: () => void;
   onMaxBet: () => void;
-  onAddBet: (n: number) => void; // DROP: 1/10/100 BET 加算
+  onAddBet: (n: number) => void; // DROP: 1/10/100/1000 BET 加算
+  onDropMax: () => void; // DROP: 張れる最大（所持ぶん・上限10000）
   onClearBet: () => void; // DROP: ベットを最小に戻す
   onToggleMute: () => void;
   onToggleAuto: () => void;
+  onToggleDu: () => void; // ダブルアップ ON/OFF
   onRefill: () => void;
 }
 
@@ -26,9 +28,11 @@ export class Hud {
   private slotBetGroup!: HTMLElement;
   private dropBetGroup!: HTMLElement;
   private addBtns: HTMLButtonElement[] = [];
+  private dropMaxBtn!: HTMLButtonElement;
   private clearBtn!: HTMLButtonElement;
   private muteBtn!: HTMLButtonElement;
   private autoBtn!: HTMLButtonElement;
+  private duBtn!: HTMLButtonElement;
   private refillBtn!: HTMLButtonElement;
 
   constructor(private state: GameState, private h: HudHandlers) {
@@ -51,9 +55,12 @@ export class Hud {
           <button class="btn" data-add="1">1<small>BET</small></button>
           <button class="btn" data-add="10">10<small>BET</small></button>
           <button class="btn" data-add="100">100<small>BET</small></button>
+          <button class="btn" data-add="1000">1000<small>BET</small></button>
+          <button class="btn gold" data-drop-max>MAX</button>
           <button class="btn ghost" data-clear-btn>クリア</button>
         </div>
         <button class="btn primary" data-spin-btn>SPIN</button>
+        <button class="btn" data-du-btn>ダブル ON</button>
         <button class="btn" data-auto-btn>AUTO</button>
         <button class="btn ghost" data-mute-btn>🔊</button>
         <button class="btn ghost hidden" data-refill-btn>+1000</button>
@@ -71,9 +78,11 @@ export class Hud {
     this.slotBetGroup = this.q("[data-slot-bet]");
     this.dropBetGroup = this.q("[data-drop-bet]");
     this.addBtns = [...this.el.querySelectorAll<HTMLButtonElement>("[data-add]")];
+    this.dropMaxBtn = this.q("[data-drop-max]");
     this.clearBtn = this.q("[data-clear-btn]");
     this.muteBtn = this.q("[data-mute-btn]");
     this.autoBtn = this.q("[data-auto-btn]");
+    this.duBtn = this.q("[data-du-btn]");
     this.refillBtn = this.q("[data-refill-btn]");
 
     this.spinBtn.addEventListener("click", () => this.h.onSpin());
@@ -82,9 +91,11 @@ export class Hud {
     this.addBtns.forEach((b) =>
       b.addEventListener("click", () => this.h.onAddBet(Number(b.dataset.add)))
     );
+    this.dropMaxBtn.addEventListener("click", () => this.h.onDropMax());
     this.clearBtn.addEventListener("click", () => this.h.onClearBet());
     this.muteBtn.addEventListener("click", () => this.h.onToggleMute());
     this.autoBtn.addEventListener("click", () => this.h.onToggleAuto());
+    this.duBtn.addEventListener("click", () => this.h.onToggleDu());
     this.refillBtn.addEventListener("click", () => this.h.onRefill());
 
     this.update();
@@ -103,6 +114,13 @@ export class Hud {
     this.autoBtn.textContent = on ? "AUTO ●" : "AUTO";
   }
 
+  /** ダブルアップ ON/OFF のボタン表示を更新（OFF=勝利を自動COLLECT）。 */
+  setDu(on: boolean): void {
+    this.duBtn.classList.toggle("active", on);
+    this.duBtn.classList.toggle("ghost", !on);
+    this.duBtn.textContent = on ? "ダブル ON" : "ダブル OFF";
+  }
+
   private busy = false;
 
   /** スピン中などのボタン無効化 */
@@ -112,6 +130,7 @@ export class Hud {
     this.betBtn.disabled = lock;
     this.maxBtn.disabled = lock;
     this.addBtns.forEach((b) => (b.disabled = lock));
+    this.dropMaxBtn.disabled = lock;
     this.clearBtn.disabled = lock;
     this.spinBtn.textContent = this.state.inRush ? "RUSH SPIN" : busy ? "SPINNING" : "SPIN";
     this.refreshSpin();
@@ -137,12 +156,11 @@ export class Hud {
   }
 
   update(): void {
-    const isDrop = this.state.mode === "drop";
-    // ベットUIをモード別に切替（DROPは1/10/100BET＋クリア、5リールはBET/MAX）
-    this.slotBetGroup.classList.toggle("hidden", isDrop);
-    this.dropBetGroup.classList.toggle("hidden", !isDrop);
-    // DROPは TOTAL BET = 単一ベットなので「BET / LINE」メーターは隠す
-    this.betMeter.classList.toggle("hidden", isDrop);
+    // ベットUIは両モード共通の BET▲ / MAX BET（DROPも巡回式プリセットに統一）。
+    this.slotBetGroup.classList.remove("hidden");
+    this.dropBetGroup.classList.add("hidden");
+    // 両モードとも単一ベット（5リールは段×20＝TOTAL BET）なので「BET / LINE」メーターは隠す
+    this.betMeter.classList.add("hidden");
 
     this.creditsEl.textContent = Math.floor(this.state.credits).toLocaleString();
     this.betEl.textContent = this.state.lineBet.toLocaleString();

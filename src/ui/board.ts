@@ -45,6 +45,25 @@ export class Board {
     this.build();
   }
 
+  /**
+   * 帯を差し替えてリールDOMを作り直す（通常帯⇄フリー帯の切替に使う）。
+   * 回転中の呼び出しは想定しない（スピン外＝アイドル時のみ）。
+   */
+  setStrips(strips: SymbolId[][]): void {
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = 0;
+    }
+    this.strips = strips;
+    this.stripEls = [];
+    this.reelEls = [];
+    this.pos = new Array(REELS).fill(0);
+    this.prevPos = new Array(REELS).fill(0);
+    this.stops = new Array(REELS).fill(0);
+    this.el.innerHTML = "";
+    this.build();
+  }
+
   private build(): void {
     for (let reel = 0; reel < REELS; reel++) {
       const reelEl = document.createElement("div");
@@ -110,9 +129,10 @@ export class Board {
   }
 
   clearHighlights(): void {
-    this.el.querySelectorAll(".cell.win, .cell.dim").forEach((c) => {
-      c.classList.remove("win", "dim");
+    this.el.querySelectorAll(".cell.win, .cell.dim, .cell.wild-fire").forEach((c) => {
+      c.classList.remove("win", "dim", "wild-fire");
     });
+    this.el.querySelectorAll(".wild-mult-badge").forEach((b) => b.remove());
     this.reelEls.forEach((r) => r.classList.remove("reach"));
   }
 

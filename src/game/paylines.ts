@@ -1,108 +1,142 @@
-// ===== ペイライン & 当たり判定 =====================================
+// ===== 当たり判定（左詰め全リール方式 / TENGU KING 化） =================
+// ラインの概念を廃止。「各シンボルが左リール(リール1)から連続して何リールに
+// 出たか」で配当を決める。配当は 2個そろいから発生。
+// ワイルドは ①通常の代用 ②各ワイルドが花火で×2/×3を持ち、盤面の全ワイルドの
+// 倍率を掛け合わせて「総配当(baseWin)」に乗算する（当たりがある時=baseWin>0のみ）。
+// docs/TENGU_KING_DESIGN.md 参照。
 import type { SymbolId } from "./symbols";
 import { SCATTER, WILD, sym } from "./symbols";
 
 export const REELS = 5;
 export const ROWS = 3;
 
-/** 各ラインは「リールごとの行インデックス(0=上,1=中,2=下)」の配列。 */
-export const PAYLINES: number[][] = [
-  [1, 1, 1, 1, 1], // 1. 中央横
-  [0, 0, 0, 0, 0], // 2. 上横
-  [2, 2, 2, 2, 2], // 3. 下横
-  [0, 1, 2, 1, 0], // 4. V字
-  [2, 1, 0, 1, 2], // 5. 山型
-  [1, 0, 0, 0, 1], // 6. 上寄せ
-  [1, 2, 2, 2, 1], // 7. 下寄せ
-  [0, 0, 1, 2, 2], // 8. 右下り
-  [2, 2, 1, 0, 0], // 9. 右上り
-  [1, 0, 1, 2, 1], // 10. ジグザグ
-];
-
-export const LINE_COUNT = PAYLINES.length;
+/**
+ * 旧10ライン方式の名残り。評価には使わない（単一ベット化の橋渡し）。
+ * `state.totalBet = lineBet × LINE_COUNT` の計算を壊さないよう 1 を維持。
+ */
+export const LINE_COUNT = 1;
 
 /** グリッドは reel-major: grid[reel][row] = SymbolId */
 export type Grid = SymbolId[][];
 
-export interface LineWin {
-  line: number; // ペイラインのインデックス
-  symbol: SymbolId; // 当たりシンボル（ワイルド代用後の本体）
-  count: number; // 左から連続した数
-  amount: number; // 払い出し
-  cells: Array<[number, number]>; // [reel,row] のリスト
+/** 1シンボルぶんの左詰め当たり。 */
+export interface SymbolWin {
+  symbol: SymbolId; // 当たりシンボル
+  count: number; // 左から連続して出たリール数（2〜5）
+  amount: number; // 払い出し（ワイルド倍率を掛ける前）
+  cells: Array<[number, number]>; // [reel,row] のリスト（演出用ハイライト）
+}
+
+/** ワイルド1個ぶんの花火倍率。 */
+export interface WildMult {
+  mult: number; // ×2 or ×3
+  cell: [number, number]; // [reel,row]
 }
 
 export interface ScatterWin {
   count: number;
-  amount: number;
+  amount: number; // 天狗は直接配当を持たない（常に0／突入トリガー専用）
   cells: Array<[number, number]>;
   triggersBonus: boolean;
 }
 
 export interface SpinEvaluation {
-  lineWins: LineWin[];
+  wins: SymbolWin[]; // 左詰め当たり一覧
+  baseWin: number; // ワイルド倍率を掛ける前の総配当
+  wildMults: WildMult[]; // 盤面に出た各ワイルドの花火倍率（baseWin>0のときのみ）
+  wildMultiplier: number; // 上記の積（花火なしは 1）
   scatter: ScatterWin | null;
-  total: number; // ライン + スキャッターの合計
+  total: number; // 最終総配当 = baseWin × wildMultiplier
 }
 
 const BONUS_SCATTER_MIN = 3;
 
+/** 花火で ×3 を引く確率（残りは ×2）。RTPで調整。 */
+const WILD_X3_CHANCE = 0.3;
+
+/** あるリールの3セルのどこかに S（またはワイルド）が出ているか。 */
+function reelHas(grid: Grid, reel: number, base: SymbolId): boolean {
+  for (let row = 0; row < ROWS; row++) {
+    const s = grid[reel][row];
+    if (s === base || s === WILD) return true;
+  }
+  return false;
+}
+
+/** あるリールで S（またはワイルド）に該当するセル座標を返す。 */
+function matchCells(
+  grid: Grid,
+  reel: number,
+  base: SymbolId
+): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (let row = 0; row < ROWS; row++) {
+    const s = grid[reel][row];
+    if (s === base || s === WILD) out.push([reel, row]);
+  }
+  return out;
+}
+
 /**
  * グリッドを評価する。
  * @param grid   reel-major のシンボル配置
- * @param lineBet 1ラインあたりのベット
- * @param totalBet 総ベット（スキャッター配当に使用）
- * @param multiplier フリースピン時などの倍率
+ * @param bet    1スピンの固定ベット
+ * @param multiplier 外部倍率（通常1。ハーネスは1）
  */
 export function evaluate(
   grid: Grid,
-  lineBet: number,
-  totalBet: number,
+  bet: number,
   multiplier = 1
 ): SpinEvaluation {
-  const lineWins: LineWin[] = [];
+  const wins: SymbolWin[] = [];
 
-  for (let li = 0; li < PAYLINES.length; li++) {
-    const pattern = PAYLINES[li];
-    const lineSymbols: SymbolId[] = pattern.map((row, reel) => grid[reel][row]);
+  // リール1（最左）に出ている実シンボルを起点に、左詰めで連続数を数える。
+  // ワイルドはリール1に出さない（engine.ts）ので、起点は常に実シンボル。
+  const seen = new Set<SymbolId>();
+  for (let row = 0; row < ROWS; row++) {
+    const base = grid[0][row];
+    if (base === WILD || base === SCATTER) continue;
+    if (seen.has(base)) continue; // 同一シンボルは1回のみ計上
+    seen.add(base);
 
-    // 左端から見て「本体シンボル」を決める（先頭がワイルドなら次の非ワイルド）。
-    let base: SymbolId | null = null;
-    for (const s of lineSymbols) {
-      if (s === SCATTER) break; // スキャッターはライン非対象
-      if (s !== WILD) {
-        base = s;
-        break;
-      }
-    }
-    // 全部ワイルドのケース
-    if (base === null && lineSymbols[0] === WILD) base = WILD;
-    if (base === null || base === SCATTER) continue;
-
-    // 左から連続一致数を数える（ワイルドは代用）
-    let count = 0;
-    const cells: Array<[number, number]> = [];
-    for (let reel = 0; reel < REELS; reel++) {
-      const s = lineSymbols[reel];
-      if (s === base || s === WILD) {
+    let count = 1;
+    const cells: Array<[number, number]> = matchCells(grid, 0, base);
+    for (let reel = 1; reel < REELS; reel++) {
+      if (reelHas(grid, reel, base)) {
         count++;
-        cells.push([reel, pattern[reel]]);
+        cells.push(...matchCells(grid, reel, base));
       } else {
         break;
       }
     }
 
-    if (count >= 3) {
-      const def = sym(base);
-      const payMul = def.pay[count as 3 | 4 | 5] ?? 0;
-      const amount = payMul * lineBet * multiplier;
+    if (count >= 2) {
+      const payMul = sym(base).pay[count as 2 | 3 | 4 | 5] ?? 0;
+      const amount = payMul * bet * multiplier;
       if (amount > 0) {
-        lineWins.push({ line: li, symbol: base, count, amount, cells });
+        wins.push({ symbol: base, count, amount, cells });
       }
     }
   }
 
-  // スキャッター（位置不問）
+  const baseWin = wins.reduce((a, w) => a + w.amount, 0);
+
+  // ▼ ワイルド花火の倍率（当たりがある＝baseWin>0 のときだけ発火）
+  const wildMults: WildMult[] = [];
+  let wildMultiplier = 1;
+  if (baseWin > 0) {
+    for (let reel = 0; reel < REELS; reel++) {
+      for (let row = 0; row < ROWS; row++) {
+        if (grid[reel][row] === WILD) {
+          const mult = Math.random() < WILD_X3_CHANCE ? 3 : 2;
+          wildMults.push({ mult, cell: [reel, row] });
+          wildMultiplier *= mult;
+        }
+      }
+    }
+  }
+
+  // 天狗（スキャッター・位置不問）。直接配当なし、突入トリガー専用。
   const scatterCells: Array<[number, number]> = [];
   for (let reel = 0; reel < REELS; reel++) {
     for (let row = 0; row < ROWS; row++) {
@@ -110,28 +144,24 @@ export function evaluate(
     }
   }
   let scatter: ScatterWin | null = null;
-  if (scatterCells.length >= 3) {
-    const n = Math.min(scatterCells.length, 5) as 3 | 4 | 5;
-    const payMul = sym(SCATTER).pay[n] ?? 0;
-    const amount = payMul * totalBet * multiplier;
+  if (scatterCells.length >= BONUS_SCATTER_MIN) {
     scatter = {
       count: scatterCells.length,
-      amount,
+      amount: 0,
       cells: scatterCells,
-      triggersBonus: scatterCells.length >= BONUS_SCATTER_MIN,
+      triggersBonus: true,
     };
   }
 
-  const total =
-    lineWins.reduce((a, w) => a + w.amount, 0) + (scatter?.amount ?? 0);
+  const total = baseWin * wildMultiplier;
 
-  return { lineWins, scatter, total };
+  return { wins, baseWin, wildMults, wildMultiplier, scatter, total };
 }
 
-/** フリースピン付与数（スキャッター数に応じて） */
+/** フリースピン付与数（天狗の数に応じて）。3個=8 / 4個=15 / 5個=25。 */
 export function freeSpinsFor(scatterCount: number): number {
-  if (scatterCount >= 5) return 20;
+  if (scatterCount >= 5) return 25;
   if (scatterCount === 4) return 15;
-  if (scatterCount === 3) return 10;
+  if (scatterCount === 3) return 8;
   return 0;
 }

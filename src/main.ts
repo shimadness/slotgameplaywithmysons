@@ -18,6 +18,7 @@ import { DropBoard } from "./ui/dropBoard";
 import { Effects } from "./ui/effects";
 import { Hud } from "./ui/hud";
 import { DoubleUp } from "./ui/doubleup";
+import { RankingUI } from "./ui/ranking";
 import { haptics } from "./native/haptics";
 import { installFitScreen } from "./ui/fitScreen";
 import { Capacitor } from "@capacitor/core";
@@ -43,6 +44,7 @@ app.innerHTML = `
           <button class="mode-btn active" data-mode="drop">3×3 DROP</button>
           <button class="mode-btn" data-mode="slot">5リール</button>
         </div>
+        <button class="paytable-btn" data-rank>🏆 ランキング</button>
         <button class="paytable-btn" data-help>配当表</button>
       </div>
     </header>
@@ -62,18 +64,56 @@ machine.appendChild(dropBoard.el);
 machine.appendChild(board.el);
 board.el.classList.add("hidden");
 
+// 5リールの天狗フリーゲーム説明（電光掲示板風の横スクロール／DROPのセブンラッシュ説明と同方式）
+const tenguRule = document.createElement("div");
+tenguRule.className = "tengu-free-rule hidden";
+{
+  const t = `👺 <b>天狗フリーゲーム</b> ― 天狗が3つそろうと突入！フリー中は<b>ワイルド</b>が大量出現し、<b>花火</b>で配当が<b>×2・×3</b>と倍々に！メダル大量獲得のチャンス！`;
+  tenguRule.innerHTML = `<div class="rr-track"><span class="rr-seg tengu">${t}</span><span class="rr-seg tengu" aria-hidden="true">${t}</span></div>`;
+}
+machine.appendChild(tenguRule);
+
 const effects = new Effects(machine, board);
 const doubleUp = new DoubleUp(sfx);
 app.appendChild(doubleUp.el);
+
+const ranking = new RankingUI();
+app.appendChild(ranking.el);
+app.querySelector("[data-rank]")!.addEventListener("click", () =>
+  ranking.openBoard(state.mode)
+);
+
+// 1ゲームの獲得メダル（ダブルアップ後の最終額）が TOP10 入りなら祝福モーダル。
+// 通信失敗してもゲームは止めない（store 側が throw しない）。
+async function considerRanking(score: number): Promise<void> {
+  if (score <= 0) return;
+  const prevBusy = busy;
+  try {
+    // ランクインして登録モーダルが開いている間は busy=true を立て、
+    // AUTO の次ゲームや setTimeout(play) が「モーダルの裏」で走らないようにする。
+    // ランク外（小粒勝ち）では onOpen が呼ばれないので、無駄な SPIN 無効化は起きない。
+    await ranking.maybeCelebrate(state.mode, score, state.bet, state.playerName, () => {
+      busy = true;
+      hud.setBusy(true);
+    });
+  } catch {
+    /* ランキングはおまけ。失敗してもゲーム進行を妨げない。 */
+  } finally {
+    busy = prevBusy;
+    hud.setBusy(prevBusy);
+  }
+}
 
 // 勝利の精算。AUTO中も含めてダブルアップに移行（最終額を addWin）。
 // RUSH（フリースピン）中だけは自動 COLLECT（ダブルアップをスキップ）。
 async function resolveWin(win: number): Promise<void> {
   if (win <= 0) return;
-  // RUSH（フリースピン）中だけ自動COLLECT。それ以外は金額に関わらずダブルアップへ（上限なし）。
-  if (state.inRush) {
+  // RUSH中、または ダブルアップOFF のときは自動COLLECT。
+  if (state.inRush || !state.duEnabled) {
     state.addWin(win);
     hud.animateWin(win);
+    // 通常勝利（非RUSH）はここで確定額なのでランキング判定。RUSHは finishRush 側で判定。
+    if (!state.inRush) await considerRanking(win);
     return;
   }
   busy = true; // ダブルアップ中はスピン禁止
@@ -81,6 +121,7 @@ async function resolveWin(win: number): Promise<void> {
   state.addWin(final);
   hud.animateWin(final);
   hud.update();
+  await considerRanking(final); // ダブルアップ後の最終額でランキング判定
 }
 
 let playerOverlay: HTMLElement;
@@ -119,14 +160,16 @@ const hud = new Hud(state, {
     if (busy || state.inRush) return;
     sfx.resume();
     sfx.ui();
-    state.cycleLineBet();
+    if (state.mode === "drop") state.cycleDropBet();
+    else state.cycleLineBet();
     hud.update();
   },
   onMaxBet: () => {
     if (busy || state.inRush) return;
     sfx.resume();
     sfx.ui();
-    state.setMaxBet();
+    if (state.mode === "drop") state.setDropMaxBet();
+    else state.setMaxBet();
     hud.update();
   },
   onAddBet: (n) => {
@@ -134,6 +177,13 @@ const hud = new Hud(state, {
     sfx.resume();
     sfx.ui();
     state.addBet(n);
+    hud.update();
+  },
+  onDropMax: () => {
+    if (busy || state.inRush) return;
+    sfx.resume();
+    sfx.ui();
+    state.betDropMax();
     hud.update();
   },
   onClearBet: () => {
@@ -153,6 +203,13 @@ const hud = new Hud(state, {
     sfx.ui();
     setAuto(!autoPlay);
     if (autoPlay && !busy && !state.inRush) void play();
+  },
+  onToggleDu: () => {
+    if (busy) return; // 勝利精算中の切替は避ける
+    sfx.resume();
+    sfx.ui();
+    state.setDuEnabled(!state.duEnabled);
+    hud.setDu(state.duEnabled);
   },
   onRefill: () => {
     sfx.resume();
@@ -201,6 +258,7 @@ app.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {
     );
     board.el.classList.toggle("hidden", mode !== "slot");
     dropBoard.el.classList.toggle("hidden", mode !== "drop");
+    tenguRule.classList.toggle("hidden", mode !== "slot");
     hud.update(); // TOTAL BET 表示を更新
   });
 });
@@ -253,6 +311,7 @@ async function playDrop(): Promise<void> {
 
   busy = true;
   hud.setBusy(true);
+  effects.clearParticles(); // 前スピン（特にフリー中の連続花火）の残留を一掃
   state.lastWin = 0;
   state.placeBet();
   hud.update();
@@ -358,6 +417,7 @@ async function finishDropRush(): Promise<void> {
     busy = false;
     hud.setBusy(false);
     hud.update();
+    await considerRanking(final); // ラッシュ総獲得（ダブルアップ後）でランキング判定
   }
 
   maybeAutoNext();
@@ -383,6 +443,7 @@ async function playSlot(): Promise<void> {
 
   busy = true;
   hud.setBusy(true);
+  effects.clearParticles(); // 前スピン（特にフリー中の連続花火）の残留を一掃
   state.lastWin = 0;
   state.placeBet();
   hud.update();
@@ -390,7 +451,7 @@ async function playSlot(): Promise<void> {
 
   const { grid, stops } = engine.spin();
   const multiplier = state.inRush ? state.rushMultiplier : 1;
-  const ev = evaluate(grid, state.lineBet, state.totalBet, multiplier);
+  const ev = evaluate(grid, state.totalBet, multiplier);
   const reach = computeReach(grid);
 
   sfx.startSpin();
@@ -449,9 +510,20 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
     effects.showWins(ev);
     const big = ev.total >= state.totalBet * 15;
     effects.sparkleForWins(ev);
-    effects.popWin(ev.total, big);
-    if (big) { sfx.winBig(); haptics.winBig(); }
-    else { sfx.winSmall(); haptics.winSmall(); }
+    if (ev.wildMults.length > 0) {
+      // まず花火前の素の配当を見せ → ワイルド花火で×N → 跳ね上がった総配当
+      effects.popWin(ev.baseWin, false);
+      sfx.winSmall();
+      await wait(650);
+      await effects.wildShow(ev); // 各ワイルドで花火＋×Nバッジ
+      effects.popWin(ev.total, big);
+      if (big) { sfx.winBig(); haptics.winBig(); }
+      else { sfx.winSmall(); haptics.winSmall(); }
+    } else {
+      effects.popWin(ev.total, big);
+      if (big) { sfx.winBig(); haptics.winBig(); }
+      else { sfx.winSmall(); haptics.winSmall(); }
+    }
     if (state.inRush) rushWinTotal += ev.total;
     await wait(big ? 2000 : 1600); // WIN を見せてからダブルアップへ（+1秒）
     await resolveWin(ev.total); // ダブルアップ → addWin（RUSH中は自動collect）
@@ -463,16 +535,20 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
   if (ev.scatter?.triggersBonus) {
     const fs = freeSpinsFor(ev.scatter.count);
     if (state.inRush) {
+      // フリー中の天狗3個で上乗せ（リトリガー）
       state.retriggerRush(fs);
       sfx.bonus();
-      await effects.banner(`RUSH 上乗せ +${fs}`, 1600);
+      await effects.banner(`👺 天狗 上乗せ +${fs}`, 1600);
     } else {
-      const mult = ev.scatter.count >= 5 ? 5 : ev.scatter.count === 4 ? 3 : 2;
+      // 天狗フリーゲーム突入。フラット倍率は無し（大量獲得はワイルド花火で作る）。
+      // ワイルド多めの「フリー帯」に切替える。
       rushWinTotal = 0;
-      state.startRush(fs, mult);
+      state.startRush(fs, 1);
+      engine.setFreeMode(true);
+      board.setStrips(engine.strips);
       enterRushFx();
       sfx.bonus();
-      await effects.rushBanner(fs, mult);
+      await effects.freeGameIntro(fs); // 突入オーバーレイ（ムービーのプレースホルダ）
     }
     hud.update();
   }
@@ -481,12 +557,15 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
 async function finishRush(): Promise<void> {
   const total = rushWinTotal;
   state.endRush();
+  engine.setFreeMode(false); // 通常帯へ戻す
+  board.setStrips(engine.strips);
   exitRushFx();
   hud.setBusy(false); // SPINボタンの表示を "RUSH SPIN" → "SPIN" に戻す
   hud.update();
   sfx.winBig();
   effects.burst(160);
-  await effects.banner(`RUSH 終了！ 獲得 ${total.toLocaleString()}`, 2400);
+  await effects.banner(`👺 天狗フリーゲーム 終了！ 獲得 ${total.toLocaleString()}`, 2400);
+  await considerRanking(total); // フリーゲーム総獲得でランキング判定
   maybeAutoNext();
 }
 
@@ -664,3 +743,4 @@ function wait(ms: number): Promise<void> {
 }
 
 hud.setMuted(sfx.muted);
+hud.setDu(state.duEnabled);

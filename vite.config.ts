@@ -5,5 +5,6 @@ export default defineConfig({
   base: "./",
   server: {
     open: true,
+    port: process.env.PORT ? Number(process.env.PORT) : undefined,
   },
 });

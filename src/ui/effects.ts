@@ -9,8 +9,11 @@ export class Effects {
   private ctx: CanvasRenderingContext2D;
   private particles: Particle[] = [];
   private rafId = 0;
+  /** 花火を「ゲーム枠の中」だけに収めるためのクリップ基準（キャビネット）。 */
+  private frame: HTMLElement | null = null;
 
   constructor(private root: HTMLElement, private board: Board) {
+    this.frame = this.root.closest(".cabinet") as HTMLElement | null;
     this.layer = document.createElement("div");
     this.layer.className = "fx-layer";
     this.root.appendChild(this.layer);
@@ -24,6 +27,21 @@ export class Effects {
     this.ctx = this.canvas.getContext("2d")!;
     this.resize();
     window.addEventListener("resize", () => this.resize());
+    // タブが非アクティブになると requestAnimationFrame が止まり、パーティクルが
+    // 画面に「凍結」して残る。隠れたら確実に全消去する（戻ったら綺麗な状態）。
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.clearParticles();
+    });
+  }
+
+  /** パーティクルとループを完全停止してキャンバスを消去する。 */
+  clearParticles(): void {
+    this.particles = [];
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = 0;
+    }
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   /** 全画面ビューポート基準でバッファを合わせる（zoom非対象なので暴走しない）。 */
@@ -41,7 +59,7 @@ export class Effects {
   showWins(ev: SpinEvaluation): void {
     if (ev.total <= 0) return;
     const winCells = new Set<string>();
-    for (const w of ev.lineWins) for (const [r, c] of w.cells) winCells.add(`${r},${c}`);
+    for (const w of ev.wins) for (const [r, c] of w.cells) winCells.add(`${r},${c}`);
     if (ev.scatter) for (const [r, c] of ev.scatter.cells) winCells.add(`${r},${c}`);
 
     // 当たり以外を少し暗く
@@ -94,6 +112,60 @@ export class Effects {
     });
   }
 
+  /**
+   * ワイルド花火（TENGU KING 名物）。盤面の各ワイルドで花火を上げ、×N バッジを出す。
+   * 配当は §2.4 で確定済み（演出は結果表示のみ）。baseWin>0 のときだけ呼ぶ。
+   * ※実アセット（Lottie/動画）に差し替える場合もこのフックを使う（§6.5）。
+   */
+  async wildShow(ev: SpinEvaluation): Promise<void> {
+    for (const wm of ev.wildMults) {
+      const [reel, row] = wm.cell;
+      const cell = this.board.cellAt(reel, row);
+      cell.classList.add("wild-fire");
+      const badge = document.createElement("div");
+      badge.className = "wild-mult-badge";
+      badge.textContent = `×${wm.mult}`;
+      cell.appendChild(badge);
+      const r = cell.getBoundingClientRect();
+      this.burstAt(r.left + r.width / 2, r.top + r.height / 2, 44, [
+        "#ffd24a",
+        "#ff5c3a",
+        "#ffcf33",
+        "#fff",
+      ]);
+      await this.wait(460);
+    }
+  }
+
+  /**
+   * 天狗フリーゲーム突入オーバーレイ（突入ムービーのプレースホルダ／§6.5）。
+   * 実装後はここを Lottie/動画に差し替える。
+   */
+  freeGameIntro(spins: number): Promise<void> {
+    return new Promise((resolve) => {
+      const o = document.createElement("div");
+      o.className = "free-intro";
+      o.innerHTML = `<div class="free-intro-inner">
+          <div class="fi-tengu">👺</div>
+          <div class="fi-title">天狗フリーゲーム</div>
+          <div class="fi-sub">FREE SPIN ×${spins}</div>
+        </div>`;
+      this.layer.appendChild(o);
+      this.burst(160, ["#ffd24a", "#e23b3b", "#ffcf33", "#fff"]);
+      setTimeout(() => {
+        o.classList.add("out");
+        setTimeout(() => {
+          o.remove();
+          resolve();
+        }, 500);
+      }, 2100);
+    });
+  }
+
+  private wait(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
   banner(text: string, ms = 1800): Promise<void> {
     return new Promise((resolve) => {
       const b = document.createElement("div");
@@ -110,18 +182,20 @@ export class Effects {
     });
   }
 
-  /** 紙吹雪/きらめきを噴射 */
+  /** 紙吹雪/きらめきを噴射（ゲーム枠の中央付近から。枠外へは step() でクリップ） */
   burst(count = 80, colors?: string[]): void {
-    // canvas 自身の現在サイズ基準で発射（描画バッファの論理座標と一致＝位置ズレ防止）
-    const r = this.canvas.getBoundingClientRect();
+    // キャビネット（無ければ全画面）の中央付近から発射＝余白に飛び散らない
+    const r = (this.frame ?? this.canvas).getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height * 0.42;
     const palette =
       colors ?? ["#ffe14a", "#ff5c7a", "#4fc3ff", "#3ddc84", "#b06bff", "#fff"];
     for (let i = 0; i < count; i++) {
       this.particles.push({
-        x: r.width / 2 + (Math.random() - 0.5) * r.width * 0.6,
-        y: r.height * 0.45,
-        vx: (Math.random() - 0.5) * 7,
-        vy: -Math.random() * 9 - 3,
+        x: cx + (Math.random() - 0.5) * r.width * 0.5,
+        y: cy,
+        vx: (Math.random() - 0.5) * 6,
+        vy: -Math.random() * 8 - 3,
         life: 1,
         size: 4 + Math.random() * 6,
         color: palette[(Math.random() * palette.length) | 0],
@@ -132,10 +206,31 @@ export class Effects {
     this.startLoop();
   }
 
+  /** 指定座標（ビューポート基準px）で放射状に花火を噴射 */
+  burstAt(cx: number, cy: number, count = 36, colors?: string[]): void {
+    const palette = colors ?? ["#ffd24a", "#ff5c3a", "#fff", "#ffe9a8"];
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 2 + Math.random() * 6;
+      this.particles.push({
+        x: cx,
+        y: cy,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 2,
+        life: 1,
+        size: 3 + Math.random() * 5,
+        color: palette[(Math.random() * palette.length) | 0],
+        rot: Math.random() * Math.PI,
+        vr: (Math.random() - 0.5) * 0.4,
+      });
+    }
+    this.startLoop();
+  }
+
   /** 当たりシンボルに応じた色できらめき */
   sparkleForWins(ev: SpinEvaluation): void {
     const colors = new Set<string>();
-    for (const w of ev.lineWins) colors.add(sym(w.symbol).color);
+    for (const w of ev.wins) colors.add(sym(w.symbol).color);
     if (ev.scatter) colors.add(sym("scatter").color);
     this.burst(ev.total > 0 ? 60 : 0, [...colors, "#fff"]);
   }
@@ -145,12 +240,20 @@ export class Effects {
     const step = () => {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.particles = this.particles.filter((p) => p.life > 0);
+      // 描画はゲーム枠（キャビネット）内にクリップ＝余白には一切出さない
+      this.ctx.save();
+      const fr = this.frame?.getBoundingClientRect();
+      if (fr) {
+        this.ctx.beginPath();
+        this.ctx.rect(fr.left, fr.top, fr.width, fr.height);
+        this.ctx.clip();
+      }
       for (const p of this.particles) {
         p.vy += 0.32; // 重力
         p.x += p.vx;
         p.y += p.vy;
         p.rot += p.vr;
-        p.life -= 0.012;
+        p.life -= 0.02; // 減衰を速めて残留を抑える（約0.8秒で消える）
         this.ctx.save();
         this.ctx.globalAlpha = Math.max(0, p.life);
         this.ctx.translate(p.x, p.y);
@@ -159,6 +262,7 @@ export class Effects {
         this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
         this.ctx.restore();
       }
+      this.ctx.restore();
       if (this.particles.length > 0) {
         this.rafId = requestAnimationFrame(step);
       } else {

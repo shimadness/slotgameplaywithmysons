@@ -111,8 +111,13 @@ body::before {
   border-radius: 10px;
   cursor: pointer;
   font-size: 13px;
+  white-space: nowrap; /* 「ランキング」「配当表」を1行に（改行させない） */
+  flex-shrink: 0; /* 詰まっても縮めて折り返させない */
 }
 .paytable-btn:hover { border-color: var(--neon); }
+/* ヘッダーの他ボタンも折り返さない */
+.header-tools .player-btn,
+.header-tools .mode-btn { white-space: nowrap; }
 
 /* 設定（ペイアウト率）切替ボタン */
 .settei-btn {
@@ -388,6 +393,25 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .rr-track { animation: none; }
 }
+
+/* 5リール：天狗フリーゲーム説明（盤面下・電光掲示板風マーキー。和テイスト＝朱×金） */
+.tengu-free-rule {
+  margin: 12px auto 0;
+  width: 100%;
+  max-width: 520px;
+  padding: 7px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 1px solid rgba(226, 59, 59, 0.55);
+  background: linear-gradient(180deg, rgba(226, 59, 59, 0.16), rgba(226, 59, 59, 0.04));
+  box-shadow: inset 0 0 12px rgba(226, 59, 59, 0.14);
+}
+.rr-seg.tengu {
+  color: #ffce63;
+  text-shadow: 0 0 6px rgba(255, 120, 60, 0.6);
+}
+.rr-seg.tengu b { color: #fff; }
 /* 突入スキャッター（7️⃣）= 金色グローで目立たせる */
 .dcell[data-sym="rush7"] {
   border-color: var(--gold);
@@ -673,6 +697,84 @@ body::before {
   to { transform: scale(1.18); }
 }
 
+/* ---- ワイルド花火（TENGU KING ×N 演出）---- */
+.cell.wild-fire { z-index: 3; }
+.cell.wild-fire::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 10px;
+  border: 2px solid #ffd24a;
+  box-shadow: 0 0 22px 4px rgba(255, 210, 74, 0.85),
+    inset 0 0 16px rgba(255, 120, 40, 0.6);
+  animation: winPulse 0.45s ease-in-out infinite alternate;
+}
+.cell.wild-fire .glyph { animation: winPop 0.4s ease-in-out infinite alternate; }
+.wild-mult-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.3);
+  font-size: calc(var(--cell) * 0.44);
+  font-weight: 900;
+  font-style: italic;
+  color: #fff;
+  text-shadow: 0 0 12px #ff5c3a, 0 0 24px #ffd24a, 0 2px 0 #7a2a00;
+  z-index: 5;
+  pointer-events: none;
+  animation: wildBadgePop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+@keyframes wildBadgePop {
+  0% { transform: translate(-50%, -50%) scale(0.3) rotate(-12deg); opacity: 0; }
+  60% { transform: translate(-50%, -50%) scale(1.25) rotate(6deg); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1) rotate(0); opacity: 1; }
+}
+
+/* ---- 天狗フリーゲーム 突入オーバーレイ（ムービーのプレースホルダ §6.5）---- */
+.free-intro {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(120, 12, 12, 0.92),
+    rgba(20, 4, 4, 0.96)
+  );
+  animation: fiIn 0.4s ease;
+}
+.free-intro.out { animation: fiOut 0.5s ease forwards; }
+.free-intro-inner { text-align: center; }
+.fi-tengu {
+  font-size: clamp(70px, 18vw, 140px);
+  filter: drop-shadow(0 0 22px #ff3b2f);
+  animation: fiTengu 0.7s ease-in-out infinite alternate;
+}
+.fi-title {
+  font-size: clamp(26px, 7vw, 52px);
+  font-weight: 900;
+  margin-top: 6px;
+  color: #ffd24a;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 18px #ff5c3a, 0 0 36px rgba(255, 210, 74, 0.6),
+    0 2px 0 #5a1500;
+}
+.fi-sub {
+  margin-top: 8px;
+  font-size: clamp(16px, 4vw, 26px);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.1em;
+}
+@keyframes fiTengu {
+  from { transform: scale(1) rotate(-4deg); }
+  to { transform: scale(1.12) rotate(4deg); }
+}
+@keyframes fiIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fiOut { from { opacity: 1; } to { opacity: 0; } }
+
 /* ---- エフェクト層 ---- */
 .fx-canvas {
   position: absolute;
@@ -826,12 +928,27 @@ body::before {
   flex: 1 1 auto;
 }
 .bet-group .btn { flex: 1; }
-.bet-group.drop .btn { flex-direction: column; gap: 1px; padding: 8px 6px; }
+/* DROPは 1/10/100/1000BET + MAX + クリア の6個。詰まるので小さめ＋折返し禁止に */
+.bet-group.drop .btn {
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 4px;
+  font-size: 13px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
 .bet-group.drop .btn small { font-size: 10px; font-weight: 700; opacity: 0.75; }
+/* 「クリア」は3文字で一番折返しやすい → さらに字間を詰めて1行に収める */
+.bet-group.drop [data-clear-btn] { letter-spacing: -0.5px; }
 .controls > [data-spin-btn] { flex: 2 1 130px; }
-.controls > [data-auto-btn] { flex: 0 1 auto; }
+/* トグルでテキストが変わるボタンは、最長表示ぶんの固定幅にして
+   幅が動かないようにする（色・文言だけ変わる）。SPINもこれで安定する。 */
+.controls > [data-auto-btn] { flex: 0 0 auto; min-width: 88px; text-align: center; }
+.controls > [data-du-btn] { flex: 0 0 auto; min-width: 112px; text-align: center; }
 .controls > [data-mute-btn],
 .controls > [data-refill-btn] { flex: 0 0 auto; }
+/* 文字数でボタンが折り返す/伸縮しないように（全ボタン共通） */
+.btn { white-space: nowrap; }
 .btn {
   border: 1px solid var(--panel-border);
   background: linear-gradient(180deg, #2a2a55, #1a1a3a);
@@ -854,6 +971,11 @@ body::before {
   font-size: 20px;
 }
 .btn.ghost { background: var(--panel); }
+.btn.gold {
+  background: linear-gradient(180deg, var(--gold), #c98a00);
+  color: #2a1c00;
+  box-shadow: 0 0 14px rgba(255, 210, 74, 0.4);
+}
 .btn.active {
   background: linear-gradient(180deg, var(--gold), #c98a00);
   color: #2a1c00;
@@ -1406,4 +1528,121 @@ html.native-app .controls > [data-refill-btn] { flex: 0 0 auto; }
   .du-actions { gap: 6px; }
   .du-actions .btn { padding: 8px 4px; font-size: 13px; }
   .du-actions .btn small { font-size: 9px; }
+}
+
+/* ===== ランキング（祝福モーダル ＋ TOP10 ビューア）===================== */
+.rank-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* ダブルアップ(50)より前面 */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 4, 16, 0.82);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+.rank-panel {
+  margin: auto;
+  width: min(420px, 100%);
+  background: linear-gradient(180deg, var(--bg1), var(--bg0));
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  padding: 20px;
+}
+
+/* --- 祝福モーダル --- */
+.rank-celebrate { text-align: center; }
+.rank-burst { font-size: 44px; animation: rankPop 0.5s ease both; }
+@keyframes rankPop {
+  0% { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+  70% { transform: scale(1.2) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+.rank-congrats {
+  margin: 4px 0 2px;
+  font-size: 26px;
+  font-weight: 900;
+  background: linear-gradient(90deg, var(--gold), #fff6c8, var(--gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.rank-sub { margin: 0 0 6px; font-size: 14px; color: #cdf; }
+.rank-sub b { color: var(--gold); font-size: 17px; }
+.rank-score {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--neon);
+  margin: 6px 0 14px;
+  text-shadow: 0 0 16px rgba(79, 195, 255, 0.6);
+}
+.rank-score small { font-size: 13px; color: #9ab; font-weight: 600; }
+.rank-namelabel { display: block; font-size: 12px; color: #9ab; margin-bottom: 6px; }
+.rank-name {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  font-size: 18px;
+  text-align: center;
+  color: #fff;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.rank-name:focus { outline: none; border-color: var(--neon); }
+.rank-actions { display: flex; gap: 10px; }
+.rank-actions .btn { flex: 1; }
+.rank-note { font-size: 11px; color: #f2c14e; min-height: 14px; margin: 8px 0 0; }
+
+/* --- TOP10 ビューア --- */
+.rank-head { display: flex; align-items: center; justify-content: space-between; }
+.rank-head h2 { margin: 0; font-size: 20px; }
+.rank-x {
+  background: none;
+  border: none;
+  color: #9ab;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+}
+.rank-x:hover { color: #fff; }
+.rank-tabs { display: flex; gap: 8px; margin: 14px 0 10px; }
+.rank-tab {
+  flex: 1;
+  padding: 8px;
+  font-size: 13px;
+  color: #cdf;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.rank-tab.active { border-color: var(--neon); color: #fff; background: rgba(79, 195, 255, 0.12); }
+.rank-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rank-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+.rank-row.top3 { background: rgba(255, 210, 74, 0.08); }
+.rank-row.mine { border-color: var(--neon); background: rgba(79, 195, 255, 0.14); }
+.rank-pos { font-size: 18px; font-weight: 800; text-align: center; color: var(--gold); }
+.rank-name-cell { font-size: 15px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-score-cell { font-size: 16px; font-weight: 800; color: var(--neon); }
+.rank-loading, .rank-empty { color: #9ab; font-size: 13px; text-align: center; padding: 16px; }
+
+@media (max-width: 560px) {
+  .rank-panel { padding: 16px; }
+  .rank-congrats { font-size: 22px; }
+  .rank-score { font-size: 28px; }
+  .rank-row { padding: 8px 10px; }
 }

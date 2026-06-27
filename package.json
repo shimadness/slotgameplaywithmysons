@@ -28,6 +28,7 @@
     "@capacitor/core": "^8.4.1",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.4.1",
-    "@capacitor/status-bar": "^8.0.2"
+    "@capacitor/status-bar": "^8.0.2",
+    "firebase": "^12.15.0"
   }
 }
