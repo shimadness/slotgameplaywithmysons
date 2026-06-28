@@ -31,6 +31,13 @@ const engine = new ReelEngine();
 const state = new GameState();
 const sfx = new Sfx();
 
+// ズーム抑止：iOS Safari/PWA は viewport の user-scalable=no を無視するので、
+// ピンチ拡大（gesture系）を明示的に抑止する。ダブルタップ拡大は CSS の
+// touch-action: manipulation 側で無効化済み（タップ操作には干渉しない）。
+for (const ev of ["gesturestart", "gesturechange", "gestureend"]) {
+  document.addEventListener(ev, (e) => e.preventDefault());
+}
+
 // ---- レイアウト ----------------------------------------------------
 app.innerHTML = `
   <div class="cabinet">
@@ -125,7 +132,7 @@ async function resolveWin(win: number): Promise<void> {
 }
 
 let playerOverlay: HTMLElement;
-let mode: Mode = "drop";
+let mode: Mode = state.mode; // 保存値から復元（リロードで3×3に戻る不具合の対策）
 let busy = false;
 let autoPlay = false;
 let rushWinTotal = 0;
@@ -252,16 +259,23 @@ app.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {
     sfx.resume();
     sfx.ui();
     mode = next;
-    state.mode = next; // ベット構造（単一 or 10ライン）を切替
-    app.querySelectorAll(".mode-btn").forEach((b) =>
-      b.classList.toggle("active", b === btn)
-    );
-    board.el.classList.toggle("hidden", mode !== "slot");
-    dropBoard.el.classList.toggle("hidden", mode !== "drop");
-    tenguRule.classList.toggle("hidden", mode !== "slot");
-    hud.update(); // TOTAL BET 表示を更新
+    state.setMode(next); // ベット構造を切替＋保存（リロード復帰用）
+    syncModeUI();
   });
 });
+
+// 現在の `mode` を画面に反映（起動時の復元・モード切替で共通利用）
+function syncModeUI(): void {
+  app.querySelectorAll<HTMLElement>(".mode-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.mode === mode)
+  );
+  board.el.classList.toggle("hidden", mode !== "slot");
+  dropBoard.el.classList.toggle("hidden", mode !== "drop");
+  tenguRule.classList.toggle("hidden", mode !== "slot");
+  hud.update();
+}
+// 起動時：保存済みモード（5リール等）に復元
+syncModeUI();
 
 // ---- 設定（ペイアウト率 1〜6）切替 ----------------------------------
 // 設定（ペイアウト率）は廃止 — DROPは本家準拠の固定配当。

@@ -36,6 +36,7 @@ const START_CREDITS = 3000;
 const SAVE_PREFIX = "triple-slot.save."; // + playerId
 const META_KEY = "triple-slot.meta"; // 名前 + 直近プレイヤー
 const DU_KEY = "triple-slot.du"; // ダブルアップ ON/OFF（キャビネット共通）
+const MODE_KEY = "triple-slot.mode"; // 現在モード（drop/slot）。リロード復帰用
 
 interface PlayerSave {
   credits: number;
@@ -77,7 +78,8 @@ export class GameState {
   lineBetIndex = 0; // LINE_BETS のインデックス（5リール用）
   dropBet = DROP_BET_DEFAULT; // DROPモードの単一ベット（DROP_BETS のいずれか）
   settei = DEFAULT_SETTEI; // （旧）ペイアウト率設定。DROPは固定配当化で未使用、5リール用に残置
-  /** 現在モード。ベット構造が変わる（drop=1BET単一 / slot=10ライン）。 */
+  /** 現在モード（drop / slot）。**保存**する＝WebViewがリロードされても元のモードに復帰
+      （iPhone SE等で AUTO+演出の負荷でWebViewが再読込→DROPに戻る不具合の対策）。 */
   mode: "drop" | "slot" = "drop";
 
   // 名前（3人分。プレイヤーごとに保存）
@@ -100,6 +102,8 @@ export class GameState {
   constructor() {
     const du = readJSON<boolean>(DU_KEY);
     this.duEnabled = typeof du === "boolean" ? du : true;
+    const m = readJSON<string>(MODE_KEY);
+    if (m === "drop" || m === "slot") this.mode = m;
     const meta = readJSON<MetaSave>(META_KEY);
     if (meta?.names) this.names = { ...DEFAULT_NAMES, ...meta.names };
     if (meta?.current && PLAYER_IDS.includes(meta.current)) {
@@ -149,6 +153,12 @@ export class GameState {
   setDuEnabled(on: boolean): void {
     this.duEnabled = on;
     writeJSON(DU_KEY, on);
+  }
+
+  /** 現在モードを切替（保存）。リロードされても復帰できるようにする。 */
+  setMode(m: "drop" | "slot"): void {
+    this.mode = m;
+    writeJSON(MODE_KEY, m);
   }
 
   /** 名前変更 */

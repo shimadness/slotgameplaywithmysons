@@ -22,6 +22,14 @@ body {
   min-height: 100%;
   /* スケーラーで1画面に収めた後の、わずかな縦バウンス/スクロールを抑止 */
   overscroll-behavior: none;
+  /* ズーム抑止：ダブルタップ拡大・ピンチ拡大を無効化（タップ/操作は通常通り） */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* ダブルタップ拡大の取りこぼし防止（個々の要素にも適用） */
+* {
+  touch-action: manipulation;
 }
 
 body {
