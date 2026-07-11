@@ -48,20 +48,24 @@ app.innerHTML = `
     <header class="title">
       <h1>TRIPLE <span>SLOT</span></h1>
       <div class="header-tools">
-        <button class="player-btn" data-player title="プレイヤーを切り替え">
-          👤 <b data-player-name>プレイヤー1</b>
-        </button>
-        <div class="mode-switch">
-          <button class="mode-btn active" data-mode="drop">3×3 DROP</button>
-          <button class="mode-btn" data-mode="slot">5リール</button>
+        <div class="tool-row primary">
+          <button class="player-btn" data-player title="プレイヤーを切り替え">
+            👤 <b data-player-name>プレイヤー1</b>
+          </button>
+          <div class="mode-switch">
+            <button class="mode-btn active" data-mode="drop">3×3 DROP</button>
+            <button class="mode-btn" data-mode="slot">5リール</button>
+          </div>
         </div>
-        <button class="paytable-btn" data-rank>🏆 ランキング</button>
-        ${
-          IS_TAIKAI
-            ? `<button class="paytable-btn" data-event>🎪 たいかい</button>`
-            : `<button class="paytable-btn" data-shop>🛒 SHOP</button>`
-        }
-        <button class="paytable-btn" data-help>配当表</button>
+        <div class="tool-row utility">
+          <button class="paytable-btn" data-rank>🏆 ランキング</button>
+          ${
+            IS_TAIKAI
+              ? `<button class="paytable-btn" data-event>🎪 たいかい</button>`
+              : `<button class="paytable-btn" data-shop>🛒 SHOP</button>`
+          }
+          <button class="paytable-btn" data-help>配当表</button>
+        </div>
       </div>
     </header>
     <div class="machine" data-machine></div>

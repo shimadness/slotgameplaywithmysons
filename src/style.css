@@ -108,8 +108,17 @@ body::before {
 }
 .header-tools {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+/* ヘッダーのツール群は2段：上=プレイヤー+モード切替 / 下=ランキング等 */
+.tool-row {
+  display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .paytable-btn {
   background: var(--panel);
@@ -1253,7 +1262,10 @@ body.rush-active .title h1 {
     font-size: clamp(22px, 7vw, 30px);
   }
   .header-tools {
-    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .tool-row {
     justify-content: center;
     gap: 6px;
   }
