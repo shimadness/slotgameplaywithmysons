@@ -28,6 +28,8 @@ export class DoubleUp {
   private atRisk = 0; // 賭けにさらしている価値（COLLECT WIN の中身）
   private save = 0; // セーブ（ロック済みで負けても残る）
   private lineBet = 1;
+  private canRetry = false; // SHOP: 負けを1回だけリトライできる権利
+  private onRetryUsed: (() => void) | null = null;
   private round: DURound = dealRound();
   private phase: Phase = "bet";
   private resolveGame: ((amount: number) => void) | null = null;
@@ -56,10 +58,16 @@ export class DoubleUp {
   }
 
   // ---- 公開: 勝負開始（最終獲得額を resolve）------------------------
-  start(win: number, lineBet: number): Promise<number> {
+  start(
+    win: number,
+    lineBet: number,
+    opts?: { canRetry?: boolean; onRetryUsed?: () => void }
+  ): Promise<number> {
     this.atRisk = win;
     this.save = 0;
     this.lineBet = lineBet;
+    this.canRetry = opts?.canRetry ?? false;
+    this.onRetryUsed = opts?.onRetryUsed ?? null;
     this.el.classList.remove("hidden");
     this.msg("");
     this.beginRound();
@@ -213,6 +221,13 @@ export class DoubleUp {
       // 上限なし：勝てば何度でも続行（COLLECT はユーザーが選ぶ）
       this.msg("WIN！ もう一度いける！");
       window.setTimeout(() => this.beginRound(), 1100);
+    } else if (this.canRetry && this.atRisk > 0) {
+      // SHOP: リトライ権があれば、負けを1回だけなかったことに（同じ賭けで再スピン）
+      this.canRetry = false;
+      this.onRetryUsed?.();
+      this.sfx.deny();
+      this.msg("LOSE… でも 🎫 リトライ！ もう一度！");
+      window.setTimeout(() => this.retryRound(), 1600);
     } else {
       this.atRisk = 0;
       const total = this.save;

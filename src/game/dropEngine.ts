@@ -11,14 +11,14 @@
 
 // ---- シンボル（弱→強） --------------------------------------------
 export type DSym =
-  | "cherry" | "orange" | "plum" | "banana" | "melon" | "bell"
+  | "cherry" | "orange" | "plum" | "bell"
   | "bar" | "bar2" | "bar3" | "blue7" | "red7" | "gold7"
   | "wild"
   | "rush7"; // セブンラッシュ突入スキャッター（役には不参加・3個で突入）
 
-/** 配当に関わる土台シンボル（弱→強・11種）。gold7/wild は別扱い。 */
+/** 配当に関わる土台シンボル（弱→強・9種）。gold7/wild は別扱い。 */
 export const BASE_SYMS: DSym[] = [
-  "cherry", "orange", "plum", "banana", "melon", "bell",
+  "cherry", "orange", "plum", "bell",
   "bar", "bar2", "bar3", "blue7", "red7",
 ];
 
@@ -39,7 +39,7 @@ export const SCATTER_WEIGHT = 28;
 export const SEVEN_RUSH_GAMES = 7;
 /** ラッシュ中の出現重み（7を大量に。fruitsは抑える）。 */
 const RUSH_WEIGHTS: Record<DSym, number> = {
-  cherry: 8, orange: 8, plum: 8, banana: 8, melon: 8, bell: 6,
+  cherry: 8, orange: 8, plum: 8, bell: 6,
   bar: 5, bar2: 3, bar3: 2, blue7: 40, red7: 26, gold7: 0.8,
   wild: 0, rush7: 0, // ワイルド5はプール非抽選（初期NEXTに注入）/ スキャッターも無し
 };
@@ -54,8 +54,6 @@ export const DSYMBOLS: Record<DSym, DSymDef> = {
   cherry: { id: "cherry", glyph: "🍒", color: "#ff5c7a", lineOdds: 1, weight: 100 },
   orange: { id: "orange", glyph: "🍊", color: "#ff9f1c", lineOdds: 2, weight: 84 },
   plum:   { id: "plum",   glyph: "🍇", color: "#9b5de5", lineOdds: 3, weight: 68 },
-  banana: { id: "banana", glyph: "🍌", color: "#ffd23f", lineOdds: 4, weight: 54 },
-  melon:  { id: "melon",  glyph: "🍈", color: "#90be6d", lineOdds: 5, weight: 42 },
   bell:   { id: "bell",   glyph: "🔔", color: "#ffd24a", lineOdds: 6, weight: 22 },
   bar:    { id: "bar",    glyph: "BAR", color: "#5bc0ff", lineOdds: 8, weight: 10 },
   bar2:   { id: "bar2",   glyph: "BAR²", color: "#5b8cff", lineOdds: 10, weight: 4 },
@@ -99,13 +97,13 @@ const GOLD7_LINE = 1000;
 //      中位(個数3〜4の右端)は画像読み取りの仮値。要最終確認。 -----------
 // 列順は BASE_SYMS（cherry…red7）。gold7 はコネクト無し（激レア）。
 const CONNECT: Record<number, Partial<Record<DSym, number>>> = {
-  9: row([100, 200, 300, 400, 500, 1000, 2000, 3000, 5000, 8000, 10000]),
-  8: row([50, 100, 150, 200, 250, 500, 1000, 1500, 2500, 4000, 5000]),
-  7: row([10, 20, 30, 40, 50, 100, 200, 300, 500, 800, 1000]),
-  6: row([4, 8, 12, 16, 20, 40, 80, 120, 200, 320, 400]),
-  5: row([1, 2, 3, 4, 5, 10, 20, 30, 50, 80, 100]),
-  4: row([0, 0, 0, 1, 2, 4, 8, 12, 16, 30, 50]), // 赤7=50（確定）, 青7=30(仮)
-  3: row([0, 0, 0, 0, 1, 2, 3, 4, 8, 12, 20]),   // 青7=12・赤7=20（確定）
+  9: row([100, 200, 300, 1000, 2000, 3000, 5000, 8000, 10000]),
+  8: row([50, 100, 150, 500, 1000, 1500, 2500, 4000, 5000]),
+  7: row([10, 20, 30, 100, 200, 300, 500, 800, 1000]),
+  6: row([4, 8, 12, 40, 80, 120, 200, 320, 400]),
+  5: row([1, 2, 3, 10, 20, 30, 50, 80, 100]),
+  4: row([0, 0, 0, 4, 8, 12, 16, 30, 50]), // 赤7=50（確定）, 青7=30(仮)
+  3: row([0, 0, 0, 2, 3, 4, 8, 12, 20]),   // 青7=12・赤7=20（確定）
 };
 function row(vals: number[]): Partial<Record<DSym, number>> {
   const o: Partial<Record<DSym, number>> = {};
@@ -396,7 +394,13 @@ function raiseOdds(oddsIdx: Record<string, number>, sym: DSym): void {
  * @param oddsCarry   フリーゲーム用に持ち越すオッズ状態（無ければ新規）
  * @param rush        セブンラッシュ中なら true（7大量プール・スキャッター無し・氷無し）
  */
-export function play(bet: number, oddsCarry?: Record<string, number>, rush = false): DropResult {
+export function play(
+  bet: number,
+  oddsCarry?: Record<string, number>,
+  rush = false,
+  forceWild = false,
+  forceRush = false
+): DropResult {
   const initPool = rush ? POOL_RUSH : POOL_INIT;
   const fillPool = rush ? POOL_RUSH : POOL_FILL;
   const fill = () => pickFrom(fillPool);
@@ -404,6 +408,21 @@ export function play(bet: number, oddsCarry?: Record<string, number>, rush = fal
   const board = randomBoard(initPool, !rush); // ラッシュ中は氷を出さない
   const initial = board.grid;
   const initialFrozen = board.frozen;
+
+  // --- SHOP効果（通常スピンのみ）------------------------------------
+  // ①セブンラッシュ強制突入：初期盤面にスキャッターを3個仕込む（役には不参加＝盤面に残る）
+  if (forceRush && !rush) {
+    for (const [c, r] of [[0, 0], [2, 0], [1, 2]] as Array<[number, number]>) {
+      initial[c][r] = "rush7";
+      initialFrozen[c][r] = false;
+    }
+  }
+  // ②ワイルド5確定：中央マスにワイルド5を設置（消えずに最大5回代用）
+  if (forceWild && !rush) {
+    const cc = (COLS - 1) / 2, cr = (ROWS - 1) / 2;
+    initial[cc][cr] = "wild";
+    initialFrozen[cc][cr] = false;
+  }
 
   // 突入判定：通常スピンで初期盤面にスキャッター3個以上
   let scatterCount = 0;

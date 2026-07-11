@@ -6,9 +6,9 @@
 // ・3リールが全て同じ＝スペシャルボーナスで強制終了。
 import { DSYMBOLS, type DSym } from "./dropEngine";
 
-/** 強さ順（弱→強）。ダブルアップ専用の12段ラダー。 */
+/** 強さ順（弱→強）。ダブルアップ専用の10段ラダー。 */
 export const DU_LADDER: DSym[] = [
-  "cherry", "orange", "plum", "banana", "melon", "bell",
+  "cherry", "orange", "plum", "bell",
   "bar", "bar2", "bar3", "blue7", "red7", "gold7",
 ];
 export function rank(s: DSym): number { return DU_LADDER.indexOf(s); }
@@ -17,7 +17,7 @@ export function duColor(s: DSym): string { return DSYMBOLS[s].color; }
 
 /** スペシャルボーナス配当（3つ揃いのシンボル別。BET倍率）。 */
 export const SPECIAL_BONUS: Record<DSym, number> = {
-  cherry: 30, orange: 45, plum: 60, banana: 90, melon: 120, bell: 150,
+  cherry: 30, orange: 45, plum: 60, bell: 150,
   bar: 300, bar2: 450, bar3: 600, blue7: 900, red7: 1500, gold7: 3000,
   wild: 0, rush7: 0,
 };
