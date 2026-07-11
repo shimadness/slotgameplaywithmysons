@@ -175,7 +175,9 @@ export class Hud {
       freeWrap.classList.add("hidden");
     }
 
-    const broke = this.state.credits < this.state.totalBet && !this.state.inRush;
+    // 大会中は +1000 救済を出さない（復活は大会UI側の一度きりボーナスのみ）
+    const broke =
+      this.state.credits < this.state.totalBet && !this.state.inRush && !this.state.inEvent;
     this.refillBtn.classList.toggle("hidden", !broke);
     this.el.classList.toggle("rush-mode", this.state.inRush);
     this.refreshSpin(); // ベット変更でSPINの有効/無効を更新

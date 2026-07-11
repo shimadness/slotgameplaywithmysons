@@ -13,9 +13,9 @@ const FIVE_REEL_UNIT = 20;
 
 // DROP モードのベット。5リールと同じ「BET▲で巡回 / MAX」式のプリセット段。
 export const DROP_BET_MIN = 0;
-export const DROP_BET_MAX = 10000;
-/** DROPのベット段（BET▲で次の段へ巡回）。 */
-export const DROP_BETS = [10, 50, 100, 500, 1000, 5000, 10000] as const;
+export const DROP_BET_MAX = 100000;
+/** DROPのベット段（BET▲で次の段へ巡回）。MAX BET=100000。 */
+export const DROP_BETS = [10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000] as const;
 const DROP_BET_DEFAULT = 100;
 /** 任意値を「その値以下の最大プリセット」に丸める（旧セーブ値の吸着用）。 */
 function snapDropBet(v: number): number {
@@ -43,10 +43,22 @@ interface PlayerSave {
   lineBetIndex: number;
   settei: number;
   dropBet: number;
+  /** SHOP購入フラグ（次ゲームまで持ち越し・リロードでも保持）。 */
+  shopWild?: boolean;
+  shopRush?: boolean;
+  shopDuRetry?: boolean;
 }
 interface MetaSave {
   names: Record<PlayerId, string>;
   current: PlayerId | null;
+}
+
+/** 大会モードの一時ウォレット（通常セーブと完全分離。大会終了で破棄）。 */
+interface EventSave {
+  credits: number;
+  dropBet: number;
+  lineBetIndex: number;
+  revived: boolean;
 }
 
 export interface PlayerSummary {
@@ -96,8 +108,26 @@ export class GameState {
   /** ダブルアップ ON/OFF（キャビネット共通設定・保存）。OFFなら勝利を自動COLLECT。 */
   duEnabled = true;
 
+  // --- SHOP 購入効果（プレイヤー別・保存。次の対象ゲームで消費）-------
+  /** 1,000,000: 次のDROPゲームで必ずワイルド5が出る。 */
+  shopWild = false;
+  /** 8,000,000: 次のDROPゲームでセブンラッシュに強制突入。 */
+  shopRush = false;
+  /** 10,000,000: 次のダブルアップ負けを1回だけリトライできる。 */
+  shopDuRetry = false;
+
   /** まだ誰も選んでいない（初回）なら true */
   firstRun = false;
+
+  // --- 大会（イベント）モード -----------------------------------------
+  /** 大会中の保存先キー。null なら通常プレイ（通常ウォレットに保存）。 */
+  private eventKey: string | null = null;
+  /** 大会中の一度きりの復活を使ったか。 */
+  eventRevived = false;
+
+  get inEvent(): boolean {
+    return this.eventKey !== null;
+  }
 
   constructor() {
     const du = readJSON<boolean>(DU_KEY);
@@ -153,6 +183,40 @@ export class GameState {
   setDuEnabled(on: boolean): void {
     this.duEnabled = on;
     writeJSON(DU_KEY, on);
+  }
+
+  // --- SHOP ----------------------------------------------------------
+  /** 指定コストを支払えるか（所持メダル）。 */
+  canAfford(cost: number): boolean {
+    return this.credits >= cost;
+  }
+  /** メダルを支払って購入（成功したら true）。フラグ設定は呼び出し側。 */
+  spend(cost: number): boolean {
+    if (this.credits < cost) return false;
+    this.credits -= cost;
+    this.save();
+    return true;
+  }
+  /** 次のDROPゲームでワイルド5確定を消費（あれば true を返してクリア）。 */
+  consumeShopWild(): boolean {
+    if (!this.shopWild) return false;
+    this.shopWild = false;
+    this.save();
+    return true;
+  }
+  /** 次のDROPゲームでセブンラッシュ強制突入を消費（あれば true）。 */
+  consumeShopRush(): boolean {
+    if (!this.shopRush) return false;
+    this.shopRush = false;
+    this.save();
+    return true;
+  }
+  /** ダブルアップ・リトライ権を消費（あれば true）。 */
+  consumeShopDuRetry(): boolean {
+    if (!this.shopDuRetry) return false;
+    this.shopDuRetry = false;
+    this.save();
+    return true;
   }
 
   /** 現在モードを切替（保存）。リロードされても復帰できるようにする。 */
@@ -299,13 +363,78 @@ export class GameState {
     this.save();
   }
 
+  // --- 大会（イベント）モード ------------------------------------------
+  /**
+   * 大会ウォレットへ切替。通常メダルは触らず、大会専用のセーブに読み書きする。
+   * 同じ大会・同じ端末ならリロードしても大会の残高が復元される。
+   */
+  beginEvent(code: string, pid: string, seed: number): void {
+    this.save(); // 通常ウォレットを確定させてから切替
+    this.eventKey = `triple-slot.event.save.${code}.${pid}`;
+    const s = readJSON<EventSave>(this.eventKey);
+    this.credits = typeof s?.credits === "number" ? s.credits : seed;
+    this.eventRevived = s?.revived === true;
+    this.dropBet = snapDropBet(typeof s?.dropBet === "number" ? s.dropBet : DROP_BET_DEFAULT);
+    this.lineBetIndex =
+      typeof s?.lineBetIndex === "number"
+        ? Math.min(Math.max(0, s.lineBetIndex), LINE_BETS.length - 1)
+        : 0;
+    // SHOP購入効果・RUSHは大会に持ち込めない（公平性）
+    this.shopWild = this.shopRush = this.shopDuRetry = false;
+    this.inRush = false;
+    this.freeSpins = 0;
+    this.freeSpinsTotal = 0;
+    this.rushMultiplier = 1;
+    this.lastWin = 0;
+    this.save();
+  }
+
+  /** 大会ウォレットを破棄して通常ウォレットへ戻る。 */
+  endEvent(): void {
+    const key = this.eventKey;
+    this.eventKey = null;
+    this.eventRevived = false;
+    if (key) {
+      try {
+        localStorage.removeItem(key);
+      } catch { /* ignore */ }
+    }
+    this.inRush = false;
+    this.freeSpins = 0;
+    this.freeSpinsTotal = 0;
+    this.rushMultiplier = 1;
+    this.lastWin = 0;
+    this.loadPlayer(this.playerId);
+  }
+
+  /** 大会中の一度きりの復活ボーナス。 */
+  reviveEvent(amount: number): void {
+    this.eventRevived = true;
+    this.credits += amount;
+    this.save();
+  }
+
   // --- 永続化（プレイヤー別）------------------------------------------
   save(): void {
+    // 大会中は大会ウォレットにのみ保存（通常セーブを汚さない）
+    if (this.eventKey) {
+      const ev: EventSave = {
+        credits: this.credits,
+        dropBet: this.dropBet,
+        lineBetIndex: this.lineBetIndex,
+        revived: this.eventRevived,
+      };
+      writeJSON(this.eventKey, ev);
+      return;
+    }
     const data: PlayerSave = {
       credits: this.credits,
       lineBetIndex: this.lineBetIndex,
       settei: this.settei,
       dropBet: this.dropBet,
+      shopWild: this.shopWild,
+      shopRush: this.shopRush,
+      shopDuRetry: this.shopDuRetry,
     };
     writeJSON(SAVE_PREFIX + this.playerId, data);
   }
@@ -330,5 +459,8 @@ export class GameState {
     this.dropBet = snapDropBet(
       typeof s?.dropBet === "number" ? Math.round(s.dropBet) : DROP_BET_DEFAULT
     );
+    this.shopWild = s?.shopWild === true;
+    this.shopRush = s?.shopRush === true;
+    this.shopDuRetry = s?.shopDuRetry === true;
   }
 }

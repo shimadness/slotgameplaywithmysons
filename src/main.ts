@@ -19,6 +19,8 @@ import { Effects } from "./ui/effects";
 import { Hud } from "./ui/hud";
 import { DoubleUp } from "./ui/doubleup";
 import { RankingUI } from "./ui/ranking";
+import { EventUI } from "./ui/event";
+import { EventClient } from "./event/client";
 import { haptics } from "./native/haptics";
 import { installFitScreen } from "./ui/fitScreen";
 import { Capacitor } from "@capacitor/core";
@@ -52,7 +54,10 @@ app.innerHTML = `
           <button class="mode-btn" data-mode="slot">5リール</button>
         </div>
         <button class="paytable-btn" data-rank>🏆 ランキング</button>
+        <button class="paytable-btn" data-event>🎪 たいかい</button>
+        <button class="paytable-btn" data-shop>🛒 SHOP</button>
         <button class="paytable-btn" data-help>配当表</button>
+        <button class="paytable-btn lite-btn" data-lite title="かるいモード（発光・花火をひかえめに）">⚡</button>
       </div>
     </header>
     <div class="machine" data-machine></div>
@@ -94,6 +99,8 @@ app.querySelector("[data-rank]")!.addEventListener("click", () =>
 // 通信失敗してもゲームは止めない（store 側が throw しない）。
 async function considerRanking(score: number): Promise<void> {
   if (score <= 0) return;
+  if (state.inEvent) return; // 大会のスコアは家族用TOP10に混ぜない
+
   const prevBusy = busy;
   try {
     // ランクインして登録モーダルが開いている間は busy=true を立て、
@@ -120,14 +127,21 @@ async function resolveWin(win: number): Promise<void> {
     state.addWin(win);
     hud.animateWin(win);
     // 通常勝利（非RUSH）はここで確定額なのでランキング判定。RUSHは finishRush 側で判定。
-    if (!state.inRush) await considerRanking(win);
+    if (!state.inRush) {
+      eventUI.notifyWin(win); // 大会: 大勝ち速報（RUSH中は総獲得で流す）
+      await considerRanking(win);
+    }
     return;
   }
   busy = true; // ダブルアップ中はスピン禁止
-  const final = await doubleUp.start(win, state.bet);
+  const final = await doubleUp.start(win, state.bet, {
+    canRetry: state.shopDuRetry,
+    onRetryUsed: () => state.consumeShopDuRetry(),
+  });
   state.addWin(final);
   hud.animateWin(final);
   hud.update();
+  eventUI.notifyWin(final); // 大会: 大勝ち速報
   await considerRanking(final); // ダブルアップ後の最終額でランキング判定
 }
 
@@ -206,6 +220,7 @@ const hud = new Hud(state, {
     hud.setMuted(sfx.muted);
   },
   onToggleAuto: () => {
+    if (state.inEvent) { sfx.deny(); return; } // 大会はAUTO禁止
     sfx.resume();
     sfx.ui();
     setAuto(!autoPlay);
@@ -226,6 +241,52 @@ const hud = new Hud(state, {
   },
 });
 app.querySelector(".cabinet")!.appendChild(hud.el);
+
+// ---- ⚡軽量モード（発光・花火をひかえめにして低スペ端末でもなめらかに）----
+const LITE_KEY = "triple-slot.lite";
+const liteBtn = app.querySelector("[data-lite]") as HTMLButtonElement;
+function setLite(on: boolean): void {
+  document.body.classList.toggle("lite", on);
+  effects.setLite(on);
+  liteBtn.classList.toggle("active", on);
+  try {
+    localStorage.setItem(LITE_KEY, on ? "1" : "0");
+  } catch { /* ignore */ }
+}
+setLite(localStorage.getItem(LITE_KEY) === "1");
+liteBtn.addEventListener("click", () => {
+  sfx.resume();
+  sfx.ui();
+  setLite(!document.body.classList.contains("lite"));
+});
+
+// ---- 🎪 大会モード（15分タイムアタック）------------------------------
+const eventUI = new EventUI({
+  state,
+  sfx,
+  isBusy: () => busy,
+  onEnter: () => {
+    setAuto(false); // 大会はAUTO禁止（手動＝ダブルアップの判断が腕の見せ所）
+    setLite(true); // 回転数の公平性＆負荷対策で軽量モードを自動ON
+    syncModeUI();
+  },
+  onExit: () => {
+    syncModeUI();
+  },
+  refreshHud: () => hud.update(),
+  burst: (n) => effects.burst(n),
+});
+app.appendChild(eventUI.el);
+// 残り時間バーはヘッダーと盤面の間に挿す
+app.querySelector(".cabinet")!.insertBefore(eventUI.timerBar, machine);
+app.querySelector("[data-event]")!.addEventListener("click", () => {
+  if (busy || state.inRush || autoPlay || state.inEvent) return;
+  sfx.resume();
+  sfx.ui();
+  eventUI.openJoin(state.playerName);
+});
+// リロード前の大会があれば復帰
+void eventUI.maybeResume();
 
 // ネイティブアプリ（iOS/Android）＋ PWAスタンドアロン 共通のレイアウト調整（CSSは html.native-app で分岐）
 const capPlatform = Capacitor.getPlatform();
@@ -288,14 +349,16 @@ function updatePlayerName(): void {
 updatePlayerName();
 buildPlayerPicker();
 app.querySelector("[data-player]")!.addEventListener("click", () => {
-  if (busy || state.inRush || autoPlay) return;
+  if (busy || state.inRush || autoPlay || state.inEvent) return; // 大会中は切替不可
   sfx.resume();
   sfx.ui();
   openPlayerPicker();
 });
-if (state.firstRun) openPlayerPicker(); // 初回はプレイヤー選択を出す
+// 初回はプレイヤー選択を出す（大会復帰があるときは大会を優先）
+if (state.firstRun && !EventClient.local()) openPlayerPicker();
 
 buildPaytable();
+buildShop();
 
 // キーボード: Space / Enter でスピン
 window.addEventListener("keydown", (e) => {
@@ -315,6 +378,7 @@ function play(): Promise<void> {
 // ===================================================================
 async function playDrop(): Promise<void> {
   if (busy) return;
+  if (eventUI.blocksSpin()) { sfx.deny(); return; } // 大会: 開始前/タイムアップ後
   sfx.resume();
   if (!state.canSpin()) {
     sfx.deny();
@@ -332,7 +396,10 @@ async function playDrop(): Promise<void> {
   haptics.spin();
 
   const inRush = state.inRush; // このスピン開始時点でラッシュ中か
-  const result = dropPlay(state.bet, undefined, inRush); // ラッシュ中は7大量プール
+  // SHOP購入効果は通常スピンでのみ消費（ラッシュ中は対象外）
+  const forceWild = !inRush && state.consumeShopWild();
+  const forceRush = !inRush && state.consumeShopRush();
+  const result = dropPlay(state.bet, undefined, inRush, forceWild, forceRush); // ラッシュ中は7大量プール
 
   sfx.startSpin();
   sfx.playStart(); // ゲーム開始〜初回配当決定の効果音（リール停止でカット）
@@ -377,7 +444,7 @@ async function playDrop(): Promise<void> {
     if (big) { sfx.winBig(); haptics.winBig(); }
     else { sfx.winSmall(); haptics.winSmall(); }
     // ラッシュ中は自動collectなので短め、通常はダブルアップ前に余韻(+1秒)
-    await wait(inRush ? (big ? 700 : 400) : (big ? 1900 : 1500));
+    await pace(inRush ? (big ? 700 : 400) : (big ? 1900 : 1500));
     await resolveWin(result.totalWin); // ラッシュ中は自動collect / 通常はダブルアップ
     if (inRush) rushWinTotal += result.totalWin;
     await wait(300);
@@ -389,6 +456,7 @@ async function playDrop(): Promise<void> {
   if (!inRush && result.triggeredRush) {
     rushWinTotal = 0;
     state.startRush(SEVEN_RUSH_GAMES, 1);
+    eventUI.notifyRush("rush"); // 大会: 速報
     enterRushFx();
     sfx.bonus();
     haptics.rush();
@@ -399,6 +467,7 @@ async function playDrop(): Promise<void> {
   busy = false;
   hud.setBusy(false);
   hud.update();
+  eventUI.onSpinCycleEnd(); // 大会: スピン数カウント＋スコア即時送信
 
   if (state.inRush) {
     if (state.freeSpins > 0) setTimeout(() => void play(), 1000);
@@ -425,12 +494,16 @@ async function finishDropRush(): Promise<void> {
     hud.setBusy(true);
     state.credits -= total; // lastWin は触らずメダルだけ戻す（overlayで隠れる）
     state.save();
-    const final = await doubleUp.start(total, state.bet);
+    const final = await doubleUp.start(total, state.bet, {
+      canRetry: state.shopDuRetry,
+      onRetryUsed: () => state.consumeShopDuRetry(),
+    });
     state.addWin(final);
     hud.animateWin(final);
     busy = false;
     hud.setBusy(false);
     hud.update();
+    eventUI.notifyWin(final); // 大会: ラッシュ総獲得の速報
     await considerRanking(final); // ラッシュ総獲得（ダブルアップ後）でランキング判定
   }
 
@@ -447,6 +520,7 @@ function dropSymColor(id: import("./game/dropEngine").DSym): string {
 // ===================================================================
 async function playSlot(): Promise<void> {
   if (busy) return;
+  if (eventUI.blocksSpin()) { sfx.deny(); return; } // 大会: 開始前/タイムアップ後
   sfx.resume();
   if (!state.canSpin()) {
     sfx.deny();
@@ -483,6 +557,7 @@ async function playSlot(): Promise<void> {
   busy = false;
   hud.setBusy(false);
   hud.update();
+  eventUI.onSpinCycleEnd(); // 大会: スピン数カウント＋スコア即時送信
 
   if (state.inRush) {
     if (state.freeSpins > 0) setTimeout(() => void play(), 1100);
@@ -528,7 +603,7 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
       // まず花火前の素の配当を見せ → ワイルド花火で×N → 跳ね上がった総配当
       effects.popWin(ev.baseWin, false);
       sfx.winSmall();
-      await wait(650);
+      await pace(650);
       await effects.wildShow(ev); // 各ワイルドで花火＋×Nバッジ
       effects.popWin(ev.total, big);
       if (big) { sfx.winBig(); haptics.winBig(); }
@@ -539,7 +614,7 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
       else { sfx.winSmall(); haptics.winSmall(); }
     }
     if (state.inRush) rushWinTotal += ev.total;
-    await wait(big ? 2000 : 1600); // WIN を見せてからダブルアップへ（+1秒）
+    await pace(big ? 2000 : 1600); // WIN を見せてからダブルアップへ（+1秒）
     await resolveWin(ev.total); // ダブルアップ → addWin（RUSH中は自動collect）
     await wait(300);
   } else {
@@ -558,6 +633,7 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
       // ワイルド多めの「フリー帯」に切替える。
       rushWinTotal = 0;
       state.startRush(fs, 1);
+      eventUI.notifyRush("tengu"); // 大会: 速報
       engine.setFreeMode(true);
       board.setStrips(engine.strips);
       enterRushFx();
@@ -579,6 +655,7 @@ async function finishRush(): Promise<void> {
   sfx.winBig();
   effects.burst(160);
   await effects.banner(`👺 天狗フリーゲーム 終了！ 獲得 ${total.toLocaleString()}`, 2400);
+  eventUI.notifyWin(total); // 大会: フリーゲーム総獲得の速報
   await considerRanking(total); // フリーゲーム総獲得でランキング判定
   maybeAutoNext();
 }
@@ -658,8 +735,8 @@ function escapeHtml(s: string): string {
 function buildPaytable(): void {
   // DROP シンボルの日本語名（配当表表示用）
   const DROP_NAMES: Record<DSym, string> = {
-    cherry: "チェリー", orange: "オレンジ", plum: "プラム", banana: "バナナ",
-    melon: "メロン", bell: "ベル", bar: "BAR", bar2: "BAR²", bar3: "BAR³",
+    cherry: "チェリー", orange: "オレンジ", plum: "プラム",
+    bell: "ベル", bar: "BAR", bar2: "BAR²", bar3: "BAR³",
     blue7: "青7", red7: "赤7", gold7: "GOLD7", wild: "ワイルド5", rush7: "ラッシュ7",
   };
 
@@ -752,9 +829,121 @@ function buildPaytable(): void {
   });
 }
 
+// ---- SHOP（メダルで特典を購入）------------------------------------
+type ShopKey = "duRetry" | "rush" | "wild";
+interface ShopItem {
+  key: ShopKey;
+  cost: number;
+  glyph: string;
+  title: string;
+  desc: string;
+  owned: () => boolean;
+}
+function buildShop(): void {
+  const items: ShopItem[] = [
+    {
+      key: "duRetry", cost: 10_000_000, glyph: "🎫",
+      title: "ダブルアップ リトライ",
+      desc: "ダブルアップの負けを1回だけ取り消して、もう一度挑戦できる。",
+      owned: () => state.shopDuRetry,
+    },
+    {
+      key: "rush", cost: 8_000_000, glyph: "7️⃣",
+      title: "セブンラッシュ 強制突入",
+      desc: "次の 3×3 DROP ゲームで必ずセブンラッシュに突入！",
+      owned: () => state.shopRush,
+    },
+    {
+      key: "wild", cost: 1_000_000, glyph: "✨",
+      title: "ワイルド5 確定",
+      desc: "次の 3×3 DROP ゲームで必ずワイルド5が出現！",
+      owned: () => state.shopWild,
+    },
+  ];
+
+  const overlay = document.createElement("div");
+  overlay.className = "paytable-overlay shop-overlay hidden";
+  app.appendChild(overlay);
+
+  const render = (): void => {
+    const rows = items
+      .map((it) => {
+        const owned = it.owned();
+        const afford = state.canAfford(it.cost);
+        const btn = owned
+          ? `<button class="btn shop-buy owned" disabled>セット済み</button>`
+          : `<button class="btn primary shop-buy" data-buy="${it.key}"${afford ? "" : " disabled"}>買う</button>`;
+        return `<div class="shop-item${owned ? " is-owned" : ""}">
+          <div class="shop-ico">${it.glyph}</div>
+          <div class="shop-body">
+            <div class="shop-title">${it.title}</div>
+            <div class="shop-desc">${it.desc}</div>
+            <div class="shop-cost">${it.cost.toLocaleString()} <span>メダル</span></div>
+          </div>
+          ${btn}
+        </div>`;
+      })
+      .join("");
+    overlay.innerHTML = `
+      <div class="paytable shop">
+        <h2>🛒 SHOP</h2>
+        <div class="shop-balance">所持メダル <b data-shop-balance>${Math.floor(state.credits).toLocaleString()}</b></div>
+        <div class="shop-list">${rows}</div>
+        <button class="btn primary" data-close>閉じる</button>
+      </div>`;
+    overlay.querySelector("[data-close]")!.addEventListener("click", () => toggle(false));
+    overlay.querySelectorAll<HTMLButtonElement>("[data-buy]").forEach((b) =>
+      b.addEventListener("click", () => buy(b.dataset.buy as ShopKey))
+    );
+  };
+
+  const toggle = (show: boolean): void => {
+    sfx.resume();
+    sfx.ui();
+    if (show) render();
+    overlay.classList.toggle("hidden", !show);
+  };
+
+  const buy = (key: ShopKey): void => {
+    const it = items.find((i) => i.key === key)!;
+    if (it.owned() || !state.spend(it.cost)) {
+      sfx.deny();
+      haptics.deny();
+      return;
+    }
+    if (key === "duRetry") state.shopDuRetry = true;
+    else if (key === "rush") state.shopRush = true;
+    else state.shopWild = true;
+    state.save();
+    sfx.bonus();
+    haptics.bonus();
+    hud.update();
+    render();
+    void effects.banner(`🛒 ${it.title} を購入！`, 1400);
+  };
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) toggle(false);
+  });
+  app.querySelector("[data-shop]")!.addEventListener("click", () => {
+    if (busy || state.inRush || autoPlay || state.inEvent) return; // 大会中はSHOP禁止
+    toggle(true);
+  });
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** 勝利の余韻など「見せる待ち時間」。大会中は回転数を稼げるよう短縮する。 */
+function pace(ms: number): Promise<void> {
+  return wait(eventUI.active ? Math.ceil(ms * 0.55) : ms);
+}
+
 hud.setMuted(sfx.muted);
 hud.setDu(state.duEnabled);
+
+// dev検証用ハンドル（vite devサーバーでのみ有効）
+if ((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV) {
+  (window as unknown as { __dev?: unknown }).__dev = { state, eventUI, hud };
+}

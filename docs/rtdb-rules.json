@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "drop": { ".read": true, ".write": true, ".indexOn": ["score"],
+      "$id": { ".validate": "newData.hasChildren(['name','score','bet','mode','at'])",
+        "name": {".validate": "newData.isString() && newData.val().length <= 12"},
+        "score": {".validate": "newData.isNumber() && newData.val() >= 0"},
+        "bet": {".validate": "newData.isNumber()"},
+        "mode": {".validate": "newData.val() === 'drop'"},
+        "at": {".validate": "newData.isNumber()"} } },
+    "slot": { ".read": true, ".write": true, ".indexOn": ["score"],
+      "$id": { ".validate": "newData.hasChildren(['name','score','bet','mode','at'])",
+        "name": {".validate": "newData.isString() && newData.val().length <= 12"},
+        "score": {".validate": "newData.isNumber() && newData.val() >= 0"},
+        "bet": {".validate": "newData.isNumber()"},
+        "mode": {".validate": "newData.val() === 'slot'"},
+        "at": {".validate": "newData.isNumber()"} } },
+    "events": {
+      "$code": { ".read": true, ".write": true,
+        ".validate": "$code.length >= 3 && $code.length <= 8" }
+    }
+  }
+}

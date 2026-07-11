@@ -11,6 +11,15 @@ export class Effects {
   private rafId = 0;
   /** 花火を「ゲーム枠の中」だけに収めるためのクリップ基準（キャビネット）。 */
   private frame: HTMLElement | null = null;
+  /** ネイティブ(スマホ実機)は常に軽量化：canvas dpr↓・パーティクル数↓で負荷を下げる。 */
+  private nativeLite = document.documentElement.classList.contains("native-app");
+  private lite = this.nativeLite;
+
+  /** ⚡軽量モードの手動切替（ネイティブは常時ON扱い）。 */
+  setLite(on: boolean): void {
+    this.lite = on || this.nativeLite;
+    this.resize();
+  }
 
   constructor(private root: HTMLElement, private board: Board) {
     this.frame = this.root.closest(".cabinet") as HTMLElement | null;
@@ -49,7 +58,8 @@ export class Effects {
     const w = window.innerWidth;
     const h = window.innerHeight;
     if (w === 0 || h === 0) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // ネイティブは dpr=1 に抑える（パーティクルは小さな四角なので画質影響ほぼ無し／塗り面積1/4）
+    const dpr = this.lite ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -190,7 +200,8 @@ export class Effects {
     const cy = r.top + r.height * 0.42;
     const palette =
       colors ?? ["#ffe14a", "#ff5c7a", "#4fc3ff", "#3ddc84", "#b06bff", "#fff"];
-    for (let i = 0; i < count; i++) {
+    const n = this.lite ? Math.ceil(count * 0.5) : count; // ネイティブは粒を半減
+    for (let i = 0; i < n; i++) {
       this.particles.push({
         x: cx + (Math.random() - 0.5) * r.width * 0.5,
         y: cy,
@@ -209,7 +220,8 @@ export class Effects {
   /** 指定座標（ビューポート基準px）で放射状に花火を噴射 */
   burstAt(cx: number, cy: number, count = 36, colors?: string[]): void {
     const palette = colors ?? ["#ffd24a", "#ff5c3a", "#fff", "#ffe9a8"];
-    for (let i = 0; i < count; i++) {
+    const n = this.lite ? Math.ceil(count * 0.5) : count; // ネイティブは粒を半減
+    for (let i = 0; i < n; i++) {
       const ang = Math.random() * Math.PI * 2;
       const sp = 2 + Math.random() * 6;
       this.particles.push({

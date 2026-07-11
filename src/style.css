@@ -680,6 +680,18 @@ body::before {
   transform: scaleY(calc(1 + var(--mb, 0) * 1.15));
   opacity: calc(1 - var(--mb, 0) * 0.3);
 }
+
+/* ===== ネイティブ(スマホ実機)向け軽量化 =====================================
+   iPhone SE 等で 5リールの重い描画（セル約640個のグリフ影・回転ブラー・全面ぼかし）が
+   メモリ/GPU圧を招き、iOSがWebViewを再読込→（初期の）3×3に戻る不具合の主因。
+   ネイティブでは重い箇所を削って再読込を防ぐ。Web/PCは従来のリッチ表示のまま。 */
+html.native-app .cabinet { backdrop-filter: none; }
+/* 回転中のモーションブラー(filter:blur)を無効化。伸び/透過(transform/opacity)は維持 */
+html.native-app .reel-strip { filter: none; will-change: transform; }
+/* リールセルのグリフ影(drop-shadow×約640個)を無効化＝最大の軽量化 */
+html.native-app .cell .glyph { filter: none; }
+/* RUSH回転背景(大きな conic-gradient＋blur を常時回転)はフリー中の最重量。ネイティブは非表示 */
+html.native-app .rush-rays { display: none; }
 .cell.dim { opacity: 0.28; filter: grayscale(0.6); }
 .cell.win {
   z-index: 2;
@@ -1116,6 +1128,52 @@ body::before {
   white-space: nowrap;
 }
 .pt-chip b { color: var(--gold); }
+
+/* ===== SHOP（メダルで特典を購入）===== */
+.shop-balance {
+  font-size: 14px;
+  opacity: 0.9;
+  margin: -6px 0 14px;
+}
+.shop-balance b {
+  color: var(--gold);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.shop-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+.shop-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.shop-item.is-owned {
+  border-color: var(--gold);
+  box-shadow: 0 0 14px rgba(255, 210, 74, 0.22);
+}
+.shop-ico {
+  font-size: 32px;
+  width: 44px;
+  text-align: center;
+  line-height: 1;
+}
+.shop-title { font-weight: 800; font-size: 15px; }
+.shop-desc { font-size: 12px; opacity: 0.75; margin: 2px 0 4px; line-height: 1.35; }
+.shop-cost {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.shop-cost span { font-size: 11px; font-weight: 600; opacity: 0.8; }
+.shop-buy { white-space: nowrap; align-self: center; }
+.shop-buy.owned { background: transparent; border-color: var(--gold); color: var(--gold); opacity: 0.9; }
+.shop-buy:disabled { opacity: 0.4; }
 
 /* ===== RUSH 中の専用背景演出 ===== */
 .rush-rays {
@@ -1653,4 +1711,372 @@ html.native-app .controls > [data-refill-btn] { flex: 0 0 auto; }
   .rank-congrats { font-size: 22px; }
   .rank-score { font-size: 28px; }
   .rank-row { padding: 8px 10px; }
+}
+
+/* ==================================================================== */
+/* 🎪 大会モード（15分タイムアタック）                                    */
+/* ==================================================================== */
+.ev-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70; /* ランキング(60)より前面 */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  padding: 24px 12px;
+  background: rgba(4, 6, 20, 0.85);
+}
+.ev-overlay.hidden { display: none; }
+.ev-panel {
+  margin: auto;
+  width: min(440px, 94vw);
+  background: linear-gradient(180deg, #131a3d, #0b1030);
+  border: 1px solid rgba(79, 195, 255, 0.35);
+  border-radius: 16px;
+  padding: 22px 20px;
+  text-align: center;
+  box-shadow: 0 12px 50px rgba(0, 0, 0, 0.6);
+}
+.ev-panel h2 { margin: 0 0 4px; font-size: 24px; color: #fff; }
+.ev-sub { margin: 2px 0 12px; color: #9ab; font-size: 13px; }
+.ev-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+  padding: 12px 14px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(79, 195, 255, 0.4);
+  border-radius: 12px;
+  outline: none;
+}
+.ev-input:focus { border-color: var(--neon); }
+.ev-code-input { text-transform: uppercase; letter-spacing: 4px; text-align: center; }
+.ev-durs { display: flex; gap: 8px; justify-content: center; margin: 10px 0 14px; }
+.ev-dur {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #cfe0ff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ev-dur.active {
+  color: #2a1c00;
+  background: linear-gradient(180deg, var(--gold), #c98a00);
+  border-color: var(--gold);
+}
+.ev-actions { display: flex; gap: 10px; justify-content: center; margin-top: 6px; }
+.ev-note { min-height: 18px; margin: 10px 0 0; color: var(--neon); font-size: 13px; }
+
+/* --- ロビー --- */
+.ev-code {
+  font-size: 64px;
+  font-weight: 900;
+  letter-spacing: 14px;
+  color: var(--gold);
+  text-shadow: 0 0 30px rgba(255, 210, 74, 0.5);
+  margin: 2px 0 10px;
+  user-select: all; /* タップで選択してコピーしやすく */
+}
+.ev-watch { color: #9ab; font-size: 12px; margin: 0 0 14px; line-height: 1.6; }
+.ev-watch-url { color: var(--neon); word-break: break-all; user-select: all; }
+.ev-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  min-height: 34px;
+  margin-bottom: 14px;
+}
+.ev-chip {
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(79, 195, 255, 0.14);
+  border: 1px solid rgba(79, 195, 255, 0.4);
+  border-radius: 999px;
+}
+.ev-chip.me { border-color: var(--gold); background: rgba(255, 210, 74, 0.14); }
+.ev-start { width: 100%; font-size: 20px; padding: 14px; margin-bottom: 10px; }
+.ev-waiting {
+  color: var(--neon);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 4px 0 14px;
+  animation: evWaiting 1s ease-in-out infinite alternate;
+}
+@keyframes evWaiting { from { opacity: 0.45; } to { opacity: 1; } }
+
+/* --- カウントダウン --- */
+.ev-go {
+  font-size: min(46vw, 220px);
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 60px rgba(79, 195, 255, 0.8);
+  margin: auto;
+}
+.ev-go.pop { animation: evGoPop 0.9s ease; }
+.ev-go.go { color: var(--gold); text-shadow: 0 0 80px rgba(255, 210, 74, 0.9); }
+@keyframes evGoPop {
+  from { transform: scale(1.6); opacity: 0.2; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* --- 残り時間バー --- */
+.ev-timer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 8px;
+  padding: 6px 12px;
+  background: rgba(79, 195, 255, 0.08);
+  border: 1px solid rgba(79, 195, 255, 0.35);
+  border-radius: 12px;
+}
+.ev-timer.hidden { display: none; }
+.ev-timer-flag { font-size: 16px; }
+.ev-timer-track {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.ev-timer-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--neon), var(--gold));
+  transition: width 0.25s linear;
+}
+.ev-clock {
+  font-size: 20px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  min-width: 72px;
+  text-align: right;
+}
+.ev-timer.warn { border-color: var(--gold); }
+.ev-timer.warn .ev-clock { color: var(--gold); }
+.ev-timer.warn .ev-timer-fill { background: linear-gradient(90deg, var(--gold), #ff9d3a); }
+.ev-timer.crit { border-color: var(--pink); animation: evCrit 0.5s ease-in-out infinite alternate; }
+.ev-timer.crit .ev-clock { color: var(--pink); }
+.ev-timer.crit .ev-timer-fill { background: var(--pink); }
+.ev-timer.up { border-color: var(--pink); animation: none; }
+.ev-timer.up .ev-clock { color: var(--pink); }
+@keyframes evCrit { from { box-shadow: none; } to { box-shadow: 0 0 18px rgba(255, 92, 122, 0.7); } }
+
+/* --- TIME UP フラッシュ --- */
+.ev-timeup {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: rgba(4, 6, 20, 0.55);
+  animation: evTimeupBg 2.2s ease forwards;
+}
+.ev-timeup-inner {
+  font-size: min(14vw, 90px);
+  font-weight: 900;
+  color: var(--pink);
+  text-shadow: 0 0 60px rgba(255, 92, 122, 0.9);
+  animation: evGoPop 0.6s ease;
+}
+@keyframes evTimeupBg { 0% { opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* --- 速報トースト --- */
+.ev-toasts {
+  position: fixed;
+  left: 10px;
+  bottom: 12px;
+  z-index: 65;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.ev-toast {
+  max-width: 78vw;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(11, 16, 48, 0.92);
+  border: 1px solid rgba(79, 195, 255, 0.45);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  animation: evToastIn 0.3s ease;
+}
+.ev-toast.out { opacity: 0; transition: opacity 0.4s ease; }
+@keyframes evToastIn {
+  from { transform: translateX(-30px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* --- 復活ボタン --- */
+.ev-rescue {
+  position: fixed;
+  right: 14px;
+  bottom: 16px;
+  z-index: 65;
+  font-size: 16px;
+  padding: 12px 18px;
+  animation: evRescue 0.8s ease-in-out infinite alternate;
+}
+.ev-rescue.hidden { display: none; }
+@keyframes evRescue {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); box-shadow: 0 0 26px rgba(255, 210, 74, 0.8); }
+}
+
+/* --- 集計中・表彰式 --- */
+.ev-counting { font-size: 22px; font-weight: 900; color: #fff; }
+.ev-counting-spin { font-size: 54px; animation: evWaiting 0.7s ease-in-out infinite alternate; }
+.ev-podium-stage {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  min-height: 220px;
+  margin: 14px 0 6px;
+}
+.ev-pod {
+  flex: 1;
+  max-width: 130px;
+  position: relative;
+  border-radius: 12px 12px 0 0;
+  padding: 14px 6px 10px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.ev-pod.pod1 {
+  min-height: 170px;
+  background: linear-gradient(180deg, rgba(255, 210, 74, 0.3), rgba(255, 210, 74, 0.08));
+  box-shadow: 0 0 26px rgba(255, 210, 74, 0.35);
+}
+.ev-pod.pod2 { min-height: 130px; }
+.ev-pod.pod3 { min-height: 104px; }
+.ev-pod.empty { visibility: hidden; }
+.ev-pod-rank { font-size: 30px; }
+.ev-pod-name {
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ev-pod-score {
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.ev-pod-veil {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  display: grid;
+  place-items: center;
+  font-size: 44px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(7, 10, 30, 0.94);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.ev-pod.veil .ev-pod-veil { opacity: 1; }
+.ev-final-list {
+  list-style: none;
+  margin: 10px 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ev-final-row {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #dfe8ff;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.ev-final-row.me { border-color: var(--neon); background: rgba(79, 195, 255, 0.14); }
+.ev-final-row b { font-variant-numeric: tabular-nums; color: var(--gold); }
+
+@media (max-width: 560px) {
+  .ev-code { font-size: 46px; letter-spacing: 10px; }
+  .ev-clock { font-size: 17px; min-width: 62px; }
+  .ev-panel { padding: 16px 14px; }
+}
+
+/* ==================================================================== */
+/* ⚡ 軽量モード（body.lite）: 発光アニメ・ぼかし・回転背景を止めて       */
+/*    低スペック端末でもなめらかに（大会中は自動ON）                     */
+/* ==================================================================== */
+body.lite .rush-rays { display: none; }
+body.lite::before { animation: none; } /* 星空 twinkle */
+body.lite.rush-active { animation: none; } /* RUSH中の全画面パルス */
+body.lite .title h1,
+body.lite.rush-active .title h1 { animation: none; }
+body.lite .drop-roads line.lit,
+body.lite .ptube-cell.next,
+body.lite .dcell[data-sym="rush7"],
+body.lite .dcell.wild5 .glyph,
+body.lite .dcell.reach-spin,
+body.lite .dcell.match,
+body.lite .dcell.match .glyph,
+body.lite .reel.reach,
+body.lite .cell.win::after,
+body.lite .cell.wild-fire::after,
+body.lite .cell.wild-fire .glyph,
+body.lite .fi-tengu,
+body.lite .rush-title,
+body.lite .hud.rush-mode,
+body.lite .btn.active,
+body.lite .du-reel.pickable .du-cell,
+body.lite .du-reel.tie .du-cell,
+body.lite .du-cell.dealer.tie {
+  animation: none !important;
+}
+body.lite .machine { animation: none; }
+body.lite .du-overlay,
+body.lite .paytable-overlay,
+body.lite .rank-overlay,
+body.lite .ev-overlay,
+body.lite .player-overlay,
+body.lite header.title {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.lite .du-overlay,
+body.lite .paytable-overlay,
+body.lite .rank-overlay,
+body.lite .player-overlay { background: rgba(4, 6, 20, 0.92); }
+/* リールのモーションブラーを無効化（毎フレームのfilter再計算が重い） */
+body.lite .reel .cell,
+body.lite .dcell .glyph { filter: none !important; }
+/* ⚡ボタンのON表示 */
+.lite-btn.active {
+  color: #2a1c00;
+  background: linear-gradient(180deg, var(--gold), #c98a00);
+  border-color: var(--gold);
 }
