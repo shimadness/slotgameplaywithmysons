@@ -20,13 +20,15 @@ import { Hud } from "./ui/hud";
 import { DoubleUp } from "./ui/doubleup";
 import { RankingUI } from "./ui/ranking";
 import { EventUI } from "./ui/event";
-import { EventClient } from "./event/client";
 import { haptics } from "./native/haptics";
 import { installFitScreen } from "./ui/fitScreen";
 import { Capacitor } from "@capacitor/core";
 import { ALL_SYMBOL_IDS, sym, type SymbolId } from "./game/symbols";
 
 type Mode = "drop" | "slot";
+
+/** 大会専用ページ（taikai.html）か。メインページには大会UIを出さない。 */
+const IS_TAIKAI = /taikai\.html$/.test(location.pathname);
 
 const app = document.getElementById("app")!;
 const engine = new ReelEngine();
@@ -54,10 +56,12 @@ app.innerHTML = `
           <button class="mode-btn" data-mode="slot">5リール</button>
         </div>
         <button class="paytable-btn" data-rank>🏆 ランキング</button>
-        <button class="paytable-btn" data-event>🎪 たいかい</button>
-        <button class="paytable-btn" data-shop>🛒 SHOP</button>
+        ${
+          IS_TAIKAI
+            ? `<button class="paytable-btn" data-event>🎪 たいかい</button>`
+            : `<button class="paytable-btn" data-shop>🛒 SHOP</button>`
+        }
         <button class="paytable-btn" data-help>配当表</button>
-        <button class="paytable-btn lite-btn" data-lite title="かるいモード（発光・花火をひかえめに）">⚡</button>
       </div>
     </header>
     <div class="machine" data-machine></div>
@@ -279,14 +283,19 @@ const eventUI = new EventUI({
 app.appendChild(eventUI.el);
 // 残り時間バーはヘッダーと盤面の間に挿す
 app.querySelector(".cabinet")!.insertBefore(eventUI.timerBar, machine);
-app.querySelector("[data-event]")!.addEventListener("click", () => {
+// 大会UIは taikai.html 専用（メインページのヘッダー幅を増やさない＝レイアウト維持）
+app.querySelector("[data-event]")?.addEventListener("click", () => {
   if (busy || state.inRush || autoPlay || state.inEvent) return;
   sfx.resume();
   sfx.ui();
   eventUI.openJoin(state.playerName);
 });
-// リロード前の大会があれば復帰
-void eventUI.maybeResume();
+if (IS_TAIKAI) {
+  // リロード前の大会があれば復帰。無ければ参加モーダルを自動で開く
+  void eventUI.maybeResume().then(() => {
+    if (!eventUI.active) eventUI.openJoin(state.playerName);
+  });
+}
 
 // ネイティブアプリ（iOS/Android）＋ PWAスタンドアロン 共通のレイアウト調整（CSSは html.native-app で分岐）
 const capPlatform = Capacitor.getPlatform();
@@ -354,8 +363,8 @@ app.querySelector("[data-player]")!.addEventListener("click", () => {
   sfx.ui();
   openPlayerPicker();
 });
-// 初回はプレイヤー選択を出す（大会復帰があるときは大会を優先）
-if (state.firstRun && !EventClient.local()) openPlayerPicker();
+// 初回はプレイヤー選択を出す（大会ページでは参加モーダルが出るので出さない）
+if (state.firstRun && !IS_TAIKAI) openPlayerPicker();
 
 buildPaytable();
 buildShop();
@@ -925,7 +934,8 @@ function buildShop(): void {
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) toggle(false);
   });
-  app.querySelector("[data-shop]")!.addEventListener("click", () => {
+  // 大会ページ(taikai.html)にはSHOPボタンが無い
+  app.querySelector("[data-shop]")?.addEventListener("click", () => {
     if (busy || state.inRush || autoPlay || state.inEvent) return; // 大会中はSHOP禁止
     toggle(true);
   });

@@ -63,6 +63,7 @@ export class Hud {
         <button class="btn" data-du-btn>ダブル ON</button>
         <button class="btn" data-auto-btn>AUTO</button>
         <button class="btn ghost" data-mute-btn>🔊</button>
+        <button class="btn ghost lite-btn" data-lite title="かるいモード（発光・花火をひかえめに）">⚡</button>
         <button class="btn ghost hidden" data-refill-btn>+1000</button>
       </div>`;
 
