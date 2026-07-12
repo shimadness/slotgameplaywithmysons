@@ -65,6 +65,14 @@ body::before {
   to { opacity: 0.6; }
 }
 
+/* body(flex中央寄せ)の子。幅を明示しないと中身に縮み、cabinetの 100% 参照が
+   コンテンツ依存になって「プレイ中にオッズ列が広がると全体も伸縮」する。
+   full幅を与えて cabinet を常に 760px 上限で安定させる。 */
+#app {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
 .cabinet {
   position: relative;
   width: min(760px, 100%);
