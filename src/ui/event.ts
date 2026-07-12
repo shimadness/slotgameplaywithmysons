@@ -203,9 +203,33 @@ export class EventUI {
     const nameIn = this.el.querySelector<HTMLInputElement>("[data-name]")!;
     const codeIn = this.el.querySelector<HTMLInputElement>("[data-code]")!;
     const status = this.el.querySelector<HTMLElement>("[data-status]")!;
+    const dursBox = this.el.querySelector<HTMLElement>("[data-durs]")!;
+    const entryBtn = this.el.querySelector<HTMLButtonElement>("[data-entry]")!;
     let durationMin = DEFAULT_MIN;
+
+    // あいことばを入力すると「既にその大会があるか」を先読みして表示を切り替える。
+    // 既存があれば時間ピッカーを隠し「参加（○ふん）」に＝別ゲーム化の誤解を防ぐ。
+    let peekTimer = 0;
+    const refreshRoomHint = async (): Promise<void> => {
+      const code = sanitizeCode(codeIn.value);
+      const room = code ? await EventClient.peekLive(code) : null;
+      if (sanitizeCode(codeIn.value) !== code) return; // 入力が変わっていたら破棄
+      if (room) {
+        dursBox.style.display = "none";
+        const mm = Math.round(room.durationMs / 60_000);
+        const label = room.status === "running" ? "開催中" : "受付中";
+        status.textContent = `この あいことば の大会に参加（${mm}ふん・${label}）`;
+        entryBtn.textContent = "参加する";
+      } else {
+        dursBox.style.display = "";
+        status.textContent = "";
+        entryBtn.textContent = "エントリー";
+      }
+    };
     codeIn.addEventListener("input", () => {
       codeIn.value = sanitizeCode(codeIn.value);
+      clearTimeout(peekTimer);
+      peekTimer = window.setTimeout(() => void refreshRoomHint(), 400);
     });
     this.el.querySelectorAll<HTMLButtonElement>(".ev-dur").forEach((b) =>
       b.addEventListener("click", () => {

@@ -4,7 +4,7 @@
 //   events/<CODE>/players/<pid> { name, credits, spins, st, done?, at }
 //   events/<CODE>/feed/<pushId> { t, name, amt?, at }
 // あいことば(CODE)が同じ端末どうしが同じ大会に入る。作った人がホスト。
-import { evDelete, evGet, evPatch, evPost, evPut, serverNow, SV_TIME } from "./api";
+import { evDelete, evGet, evPatch, evPost, serverNow, SV_TIME } from "./api";
 
 export type EventStatus = "lobby" | "running" | "done";
 
@@ -60,6 +60,20 @@ export function sanitizeCode(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
 }
 
+/**
+ * 「もう終わったも同然」の大会か（＝あいことばを作り直してよい）。
+ * 終了後10分過ぎた running / 24時間放置の lobby は再利用可能とみなす。
+ */
+export function isStaleMeta(meta: EventMeta): boolean {
+  const now = serverNow();
+  return (
+    (meta.status === "running" &&
+      !!meta.startAt &&
+      now > meta.startAt + COUNTDOWN_MS + meta.durationMs + 10 * 60_000) ||
+    (meta.status === "lobby" && now - (meta.createdAt ?? 0) > 24 * 60 * 60_000)
+  );
+}
+
 export function randomCode(): string {
   // 紛らわしい文字（0/O, 1/I）を除いた4文字
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -113,16 +127,10 @@ export class EventClient {
     seed: number;
   }): Promise<{ ok: boolean; isHost: boolean; meta: EventMeta | null }> {
     const meta = await evGet<EventMeta>(this.path("/meta"));
-    // ホストが「おわる」を押さず放置した大会でコードが使えなくなるのを防ぐ:
-    // 終了後10分過ぎた running / 24時間放置の lobby は「終わったもの」として作り直す。
-    const now = serverNow();
-    const stale =
-      !!meta &&
-      ((meta.status === "running" &&
-        !!meta.startAt &&
-        now > meta.startAt + COUNTDOWN_MS + meta.durationMs + 10 * 60_000) ||
-        (meta.status === "lobby" && now - (meta.createdAt ?? 0) > 24 * 60 * 60_000));
-    if (meta && meta.status !== "done" && !stale) {
+    const live = !!meta && meta.status !== "done" && !isStaleMeta(meta);
+    if (live && meta) {
+      // 既存の生きた大会に参加。制限時間・初期メダルは**この大会のもの**を採用
+      // （参加者が別の時間を選んでも、あいことばが同じなら同じ大会に入る）。
       const joined = await evPatch<EventPlayer>(this.path(`/players/${this.pid}`), {
         name: this.name,
         credits: meta.seed,
@@ -134,22 +142,53 @@ export class EventClient {
       void this.feed("join");
       return { ok: true, isHost: meta.host === this.pid, meta };
     }
-    // 新規作成（過去の done イベントはノードごと上書きで一掃）
-    const created = await evPut<EventSnap>(this.path(), {
-      meta: {
-        status: "lobby",
-        createdAt: SV_TIME,
-        durationMs: opts.durationMs,
-        seed: opts.seed,
-        host: this.pid,
-      },
-      players: {
-        [this.pid]: { name: this.name, credits: opts.seed, spins: 0, st: "alive", at: SV_TIME },
-      },
+
+    // ここに来る＝大会が無い / done / stale → 新規作成（または作り直し）。
+    // done/stale の作り直しは古い参加者・フィードを掃除（新規なら no-op）。
+    if (meta) {
+      await evDelete(this.path("/players"));
+      await evDelete(this.path("/feed"));
+    }
+    // meta を立てる。**ノード全体の PUT はしない**（＝ほぼ同時に別の人が作っても
+    // 相手の参加枠を消さない）。host は last-writer になるが直後の read で収束させる。
+    // startAt は必ずクリア（done の作り直しで古い開始時刻が残らないように）。
+    const mres = await evPatch(this.path("/meta"), {
+      status: "lobby",
+      createdAt: SV_TIME,
+      startAt: null,
+      durationMs: opts.durationMs,
+      seed: opts.seed,
+      host: this.pid,
     });
-    if (created === null) return { ok: false, isHost: false, meta: null };
-    const m = await evGet<EventMeta>(this.path("/meta"));
-    return { ok: true, isHost: true, meta: m };
+    if (mres === null) return { ok: false, isHost: false, meta: null };
+    // 自分の参加枠だけを書く（他人の枠は触らない）。
+    await evPatch<EventPlayer>(this.path(`/players/${this.pid}`), {
+      name: this.name,
+      credits: opts.seed,
+      spins: 0,
+      st: "alive",
+      at: SV_TIME,
+    });
+    // レース確認: 実際に host になったのは誰かを読み直す。
+    const after = await evGet<EventMeta>(this.path("/meta"));
+    if (after === null) return { ok: false, isHost: false, meta: null };
+    const isHost = after.host === this.pid;
+    // 同時作成で相手が host になり初期メダルが違うなら、相手の値に合わせ直す（公平性）。
+    if (!isHost && after.seed !== opts.seed) {
+      await evPatch(this.path(`/players/${this.pid}`), { credits: after.seed });
+    }
+    void this.feed("join");
+    return { ok: true, isHost, meta: after };
+  }
+
+  /**
+   * UI用: そのあいことばに「生きた大会」があれば meta を返す（無ければ null）。
+   * 参加モーダルで「新規作成か・既存参加か」を先読みして表示を切り替えるのに使う。
+   */
+  static async peekLive(code: string): Promise<EventMeta | null> {
+    const meta = await evGet<EventMeta>(`events/${code}/meta`);
+    if (!meta || meta.status === "done" || isStaleMeta(meta)) return null;
+    return meta;
   }
 
   /** ホスト: 大会スタート（サーバー時刻が起点になる） */
