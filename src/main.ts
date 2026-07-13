@@ -794,10 +794,13 @@ function buildPaytable(): void {
     const note =
       id === "wild" ? "代用ワイルド"
       : id === "scatter" ? "3個以上でRUSH" : "";
+    // ワイルド/スキャッターはライン配当を持たない（pay:{}）ので「×undefined」を出さず「—」に
+    const payCell =
+      d.pay[3] != null ? `×${d.pay[3]} / ×${d.pay[4]} / ×${d.pay[5]}` : "—";
     return `<tr>
       <td class="pt-glyph" style="color:${d.color}">${d.glyph}</td>
       <td class="pt-name">${d.name}</td>
-      <td class="pt-pay">×${d.pay[3]} / ×${d.pay[4]} / ×${d.pay[5]}</td>
+      <td class="pt-pay">${payCell}</td>
       <td class="pt-note">${note}</td>
     </tr>`;
   }).join("");
@@ -847,6 +850,7 @@ function buildPaytable(): void {
     sfx.resume();
     sfx.ui();
     overlay.classList.toggle("hidden", !show);
+    if (show) overlay.scrollTop = 0; // 再オープン時は必ず先頭から表示
   };
   app.querySelector("[data-help]")!.addEventListener("click", () => toggle(true));
   overlay.querySelector("[data-close]")!.addEventListener("click", () => toggle(false));
@@ -928,6 +932,7 @@ function buildShop(): void {
     sfx.ui();
     if (show) render();
     overlay.classList.toggle("hidden", !show);
+    if (show) overlay.scrollTop = 0; // 再オープン時は先頭から
   };
 
   const buy = (key: ShopKey): void => {
