@@ -17,6 +17,8 @@ export interface EventMeta {
   /** 全員共通の初期メダル */
   seed: number;
   host: string;
+  /** ホストが途中で中断したら true（全クライアントが検知して離脱）。 */
+  aborted?: boolean;
 }
 
 export interface EventPlayer {
@@ -156,6 +158,7 @@ export class EventClient {
       status: "lobby",
       createdAt: SV_TIME,
       startAt: null,
+      aborted: null, // 前回の中断フラグを必ずクリア（残ると新規大会が即離脱する）
       durationMs: opts.durationMs,
       seed: opts.seed,
       host: this.pid,
@@ -200,6 +203,11 @@ export class EventClient {
   /** ホスト: 大会を閉じる（コード再利用可能に） */
   async markDone(): Promise<void> {
     await evPatch(this.path("/meta"), { status: "done" });
+  }
+
+  /** ホスト: 大会を途中で中断（全員離脱＋コード即再利用可）。 */
+  async abort(): Promise<void> {
+    await evPatch(this.path("/meta"), { status: "done", aborted: true });
   }
 
   /** ロビーから退出（参加を取り消す） */

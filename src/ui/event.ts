@@ -91,7 +91,11 @@ export class EventUI {
     this.timerBar.innerHTML = `
       <span class="ev-timer-flag">🏁</span>
       <div class="ev-timer-track"><div class="ev-timer-fill" data-fill></div></div>
-      <b class="ev-clock" data-clock>--:--</b>`;
+      <b class="ev-clock" data-clock>--:--</b>
+      <button class="ev-quit" data-quit title="中断／退出">⏹</button>`;
+    this.timerBar
+      .querySelector("[data-quit]")!
+      .addEventListener("click", () => this.onQuitClicked());
 
     this.toastsEl = document.createElement("div");
     this.toastsEl.className = "ev-toasts";
@@ -449,6 +453,12 @@ export class EventUI {
     if (!snap) return;
     this.meta = snap.meta ?? this.meta;
 
+    // ホストが中断したら全端末が離脱（ロビー含む）。
+    if (snap.meta?.aborted) {
+      this.gracefulExit("⏹ ホストが大会を中断しました");
+      return;
+    }
+
     if (this.phase === "lobby") {
       if (snap.players) this.renderLobbyPlayers(snap.players);
       if (snap.meta?.status === "running" && snap.meta.startAt) {
@@ -624,6 +634,11 @@ export class EventUI {
 
   private async exit(): Promise<void> {
     if (this.isHost) await this.client?.markDone();
+    this.teardown();
+  }
+
+  /** 大会からの離脱に共通の後片付け（通常終了・中断・退出で共用）。 */
+  private teardown(): void {
     EventClient.clearLocal();
     this.stopLoops();
     this.hidePanel();
@@ -637,6 +652,43 @@ export class EventUI {
     this.feedPrimed = false;
     this.deps.state.endEvent();
     this.deps.onExit();
+  }
+
+  // ---- 中断／退出 -----------------------------------------------------
+  /** タイマーバーの ⏹ ボタン：ホスト＝全員中断 / 参加者＝自分だけ退出。 */
+  private onQuitClicked(): void {
+    if (this.phase !== "playing" && this.phase !== "ended") return;
+    const host = this.isHost;
+    const q = host
+      ? { icon: "⏹ 中断", msg: "大会を 中断しますか？<br />みんなの プレイが 終わります", ok: "中断する", cls: "danger" }
+      : { icon: "🚪 退出", msg: "大会から 退出しますか？<br />自分だけ 抜けます（大会は つづきます）", ok: "退出する", cls: "primary" };
+    this.showPanel(`
+      <div class="ev-panel ev-confirm">
+        <h2 class="ev-title">${q.icon}</h2>
+        <p class="ev-sub">${q.msg}</p>
+        <div class="ev-actions">
+          <button class="btn ${q.cls}" data-ok>${q.ok}</button>
+          <button class="btn ghost" data-cancel>やめる</button>
+        </div>
+      </div>`);
+    this.el.querySelector("[data-cancel]")!.addEventListener("click", () => this.hidePanel());
+    this.el.querySelector("[data-ok]")!.addEventListener("click", () => void this.confirmQuit(host));
+  }
+
+  private async confirmQuit(host: boolean): Promise<void> {
+    this.deps.sfx.ui();
+    if (host) await this.client?.abort();
+    else await this.client?.leave();
+    const msg = host ? "⏹ 大会を中断しました" : "🚪 大会から退出しました";
+    this.teardown();
+    this.toast(msg);
+  }
+
+  /** 他端末（ホスト）の中断を検知したときの離脱。 */
+  private gracefulExit(msg: string): void {
+    if (this.phase === "idle") return;
+    this.teardown();
+    this.toast(msg);
   }
 
   // ---- パネル表示ユーティリティ ---------------------------------------

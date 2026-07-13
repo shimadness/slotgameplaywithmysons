@@ -52,7 +52,7 @@ function renderCodeEntry(root: HTMLElement): void {
   input.focus();
 }
 
-type SpPhase = "connect" | "lobby" | "running" | "counting" | "podium";
+type SpPhase = "connect" | "lobby" | "running" | "counting" | "podium" | "aborted";
 
 interface Standing extends EventPlayer {
   pid: string;
@@ -119,6 +119,17 @@ class Spectator {
     }
     this.snapCache = snap;
     const meta = snap.meta;
+
+    // ホストが中断したら専用表示（表彰式にはしない）。
+    if (meta.aborted) {
+      if (this.phase !== "aborted") {
+        this.phase = "aborted";
+        this.clockEl.textContent = "";
+        this.clockEl.className = "sp-clock";
+        this.stageEl.innerHTML = `<div class="sp-wait">⏹ 大会は中断されました</div>`;
+      }
+      return;
+    }
 
     // フェーズ決定
     let next: SpPhase;
@@ -233,7 +244,7 @@ class Spectator {
   // ---- タイマー --------------------------------------------------------
   private tickClock(): void {
     const meta = this.snapCache?.meta;
-    if (!meta || this.phase === "lobby" || this.phase === "podium") {
+    if (!meta || this.phase === "lobby" || this.phase === "podium" || this.phase === "aborted") {
       this.clockEl.textContent = this.phase === "lobby" ? "READY" : "";
       this.clockEl.className = "sp-clock";
       return;
