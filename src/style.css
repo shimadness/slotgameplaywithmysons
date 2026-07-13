@@ -1631,7 +1631,7 @@ html.native-app .controls > [data-refill-btn] { flex: 0 0 auto; }
 }
 .rank-panel {
   margin: auto;
-  width: min(420px, 100%);
+  width: min(520px, 100%);
   background: linear-gradient(180deg, var(--bg1), var(--bg0));
   border: 1px solid var(--panel-border);
   border-radius: 16px;
@@ -1723,14 +1723,24 @@ html.native-app .controls > [data-refill-btn] { flex: 0 0 auto; }
 .rank-row.mine { border-color: var(--neon); background: rgba(79, 195, 255, 0.14); }
 .rank-pos { font-size: 18px; font-weight: 800; text-align: center; color: var(--gold); }
 .rank-name-cell { font-size: 15px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rank-score-cell { font-size: 16px; font-weight: 800; color: var(--neon); }
+.rank-score-cell {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--neon);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .rank-loading, .rank-empty { color: #9ab; font-size: 13px; text-align: center; padding: 16px; }
 
 @media (max-width: 560px) {
   .rank-panel { padding: 16px; }
   .rank-congrats { font-size: 22px; }
   .rank-score { font-size: 28px; }
-  .rank-row { padding: 8px 10px; }
+  /* 画面幅に縛られる狭幅では、余白・文字を詰めて名前とスコアを両立 */
+  .rank-row { padding: 8px 8px; gap: 5px; grid-template-columns: 28px 1fr auto; }
+  .rank-name-cell { font-size: 13px; }
+  .rank-score-cell { font-size: 11px; }
+  .rank-pos { font-size: 15px; }
 }
 
 /* ==================================================================== */
