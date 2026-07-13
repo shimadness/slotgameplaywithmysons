@@ -27,8 +27,15 @@ import { ALL_SYMBOL_IDS, sym, type SymbolId } from "./game/symbols";
 
 type Mode = "drop" | "slot";
 
-/** 大会専用ページ（taikai.html）か。メインページには大会UIを出さない。 */
+/** 大会専用ページ（taikai.html）か。 */
 const IS_TAIKAI = /taikai\.html$/.test(location.pathname);
+/** インストール型（Capacitorネイティブ or スタンドアロンPWA）。URLバーが無く
+    taikai.html へ直接飛べないので、index 画面にも大会(🎪)動線を出す。 */
+const capPlatform = Capacitor.getPlatform();
+const isStandalonePWA =
+  window.matchMedia?.("(display-mode: standalone)").matches === true ||
+  (navigator as unknown as { standalone?: boolean }).standalone === true;
+const IS_APP_LIKE = capPlatform !== "web" || isStandalonePWA;
 
 const app = document.getElementById("app")!;
 const engine = new ReelEngine();
@@ -59,11 +66,8 @@ app.innerHTML = `
         </div>
         <div class="tool-row utility">
           <button class="paytable-btn" data-rank>🏆 ランキング</button>
-          ${
-            IS_TAIKAI
-              ? `<button class="paytable-btn" data-event>👑 メダル王</button>`
-              : `<button class="paytable-btn" data-shop>🛒 SHOP</button>`
-          }
+          ${!IS_TAIKAI ? `<button class="paytable-btn" data-shop>🛒 SHOP</button>` : ""}
+          ${IS_TAIKAI || IS_APP_LIKE ? `<button class="paytable-btn" data-event>👑 メダル王</button>` : ""}
           <button class="paytable-btn" data-help>配当表</button>
         </div>
       </div>
@@ -294,19 +298,16 @@ app.querySelector("[data-event]")?.addEventListener("click", () => {
   sfx.ui();
   eventUI.openJoin(state.playerName);
 });
-if (IS_TAIKAI) {
-  // リロード前の大会があれば復帰。無ければ参加モーダルを自動で開く
+if (IS_TAIKAI || IS_APP_LIKE) {
+  // リロード/再起動前の大会があれば復帰。taikai.html は無ければ参加モーダルも自動で開く。
+  // ネイティブ/PWA の index では自動で開かない（🎪ボタンから開く）。
   void eventUI.maybeResume().then(() => {
-    if (!eventUI.active) eventUI.openJoin(state.playerName);
+    if (IS_TAIKAI && !eventUI.active) eventUI.openJoin(state.playerName);
   });
 }
 
 // ネイティブアプリ（iOS/Android）＋ PWAスタンドアロン 共通のレイアウト調整（CSSは html.native-app で分岐）
-const capPlatform = Capacitor.getPlatform();
-const isStandalonePWA =
-  window.matchMedia?.("(display-mode: standalone)").matches === true ||
-  (navigator as unknown as { standalone?: boolean }).standalone === true;
-if (capPlatform !== "web" || isStandalonePWA) {
+if (IS_APP_LIKE) {
   document.documentElement.classList.add("native-app");
   if (capPlatform !== "web") document.documentElement.classList.add(`native-${capPlatform}`);
   // セブンラッシュ告知を「オッズ列の下」→「3×3グリッドの下（全幅）」へ移動
