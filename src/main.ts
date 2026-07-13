@@ -61,7 +61,7 @@ app.innerHTML = `
           <button class="paytable-btn" data-rank>🏆 ランキング</button>
           ${
             IS_TAIKAI
-              ? `<button class="paytable-btn" data-event>🎪 たいかい</button>`
+              ? `<button class="paytable-btn" data-event>👑 メダル王</button>`
               : `<button class="paytable-btn" data-shop>🛒 SHOP</button>`
           }
           <button class="paytable-btn" data-help>配当表</button>

@@ -37,7 +37,7 @@ export function renderSpectator(root: HTMLElement): void {
 function renderCodeEntry(root: HTMLElement): void {
   root.innerHTML = `
     <div class="sp-entry">
-      <h1>📺 大会モニター</h1>
+      <h1>📺 メダル王決定戦 モニター</h1>
       <input class="sp-entry-input" maxlength="8" placeholder="あいことば" autocapitalize="characters" />
       <button class="sp-entry-btn">ひらく</button>
     </div>`;
@@ -84,7 +84,7 @@ class Spectator {
     this.root.innerHTML = `
       <div class="sp">
         <header class="sp-head">
-          <div class="sp-title">TRIPLE <span>SLOT</span> 大会</div>
+          <div class="sp-title">👑 メダル王決定戦</div>
           <div class="sp-code">🎪 ${this.code}</div>
         </header>
         <div class="sp-clock" data-clock>--:--</div>

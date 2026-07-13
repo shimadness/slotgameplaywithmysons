@@ -1,7 +1,7 @@
 // TRIPLE SLOT PWA Service Worker
 // ハッシュ付きアセット(/assets/…)は不変なので cache-first、HTML等は network-first(失敗時cache)。
 // これでインストール可能＋オフライン動作。デプロイ更新時は CACHE 名を上げる。
-const CACHE = "triple-slot-v2";
+const CACHE = "triple-slot-v3";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) =>

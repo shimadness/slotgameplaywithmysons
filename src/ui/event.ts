@@ -191,12 +191,12 @@ export class EventUI {
   private renderJoin(defaultName: string): void {
     this.showPanel(`
       <div class="ev-panel ev-join">
-        <h2>🎪 かせぎ大会</h2>
-        <p class="ev-sub">おなじ あいことば で あつまろう</p>
+        <h2 class="ev-title">👑 メダル王決定戦</h2>
+        <p class="ev-sub">15分で メダルを いちばん 稼いだ人が優勝！<br />おなじ <b>あいことば</b> で あつまろう</p>
         <input class="ev-input" data-name type="text" maxlength="12"
                placeholder="なまえ" value="${escapeHtml(defaultName)}" />
         <input class="ev-input ev-code-input" data-code type="text" maxlength="8"
-               placeholder="あいことば（からっぽ=あたらしく つくる）" autocapitalize="characters" />
+               placeholder="あいことば（みんなで そろえる）" autocapitalize="characters" />
         <div class="ev-durs" data-durs>
           ${DURATIONS_MIN.map(
             (m) =>

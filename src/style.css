@@ -1759,7 +1759,19 @@ html.native-app .controls > [data-refill-btn] { flex: 0 0 auto; }
   box-shadow: 0 12px 50px rgba(0, 0, 0, 0.6);
 }
 .ev-panel h2 { margin: 0 0 4px; font-size: 24px; color: #fff; }
-.ev-sub { margin: 2px 0 12px; color: #9ab; font-size: 13px; }
+/* メダル王決定戦タイトル＝金のグラデ＋ほのかなグロー */
+.ev-panel h2.ev-title {
+  font-size: 27px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(180deg, #fff2b8, var(--gold) 55%, #e39a1f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 22px rgba(255, 210, 74, 0.35);
+}
+.ev-sub { margin: 2px 0 12px; color: #9ab; font-size: 13px; line-height: 1.6; }
+.ev-sub b { color: var(--gold); }
 .ev-input {
   display: block;
   width: 100%;
