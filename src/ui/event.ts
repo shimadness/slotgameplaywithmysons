@@ -144,6 +144,16 @@ export class EventUI {
     void this.sendHeartbeat(true);
   }
 
+  /**
+   * いま確定したスコアを即座に送信（スピン数は増やさない）。
+   * ラッシュ後ダブルアップの最終値など「スピン境界でない確定」で、
+   * 自分/他プレイヤー/観戦モニターの表示を素早く一致させるために使う。
+   */
+  reportScoreNow(): void {
+    if (this.phase !== "playing" && this.phase !== "ended") return;
+    void this.sendHeartbeat(true);
+  }
+
   /** 🎪ボタン: 参加モーダルを開く */
   openJoin(defaultName: string): void {
     if (this.active) return;

@@ -66,6 +66,8 @@ class Spectator {
   private seenFeed = new Set<string>();
   private feedPrimed = false;
   private podiumShown = false;
+  private podiumRevealDone = false; // 3→2→1のリベール演出が完了したか
+  private podiumSig = ""; // 表彰式に描いた順位の署名（遅れて確定した値で再描画するため）
   private confetti: Confetti | null = null;
 
   // DOM
@@ -172,7 +174,20 @@ class Spectator {
         </div>`;
     } else if (this.phase === "running" || this.phase === "counting") {
       this.paintBoard();
+    } else if (this.phase === "podium") {
+      // リベール演出後に、遅れて確定した値（時間切れ後のラッシュ＋ダブルアップ等）が
+      // 届いたら順位を静かに描き直す。演出中は触らない（署名が変わっても待つ）。
+      if (this.podiumRevealDone && this.standingsSig() !== this.podiumSig) {
+        this.renderPodium(true);
+      }
     }
+  }
+
+  /** 順位の署名（pid:credits:done を連結）。変化検知用。 */
+  private standingsSig(): string {
+    return this.standings()
+      .map((s) => `${s.pid}:${s.credits}:${s.done ? 1 : 0}`)
+      .join(",");
   }
 
   // ---- ライブ順位（バー＋FLIPアニメ） ---------------------------------
@@ -285,7 +300,11 @@ class Spectator {
         <div class="sp-podium-stage">${pod(1)}${pod(0)}${pod(2)}</div>
         ${rest ? `<ol class="sp-final-list">${rest}</ol>` : ""}
       </div>`;
-    if (instant) return;
+    this.podiumSig = this.standingsSig(); // いま描いた内容を記録
+    if (instant) {
+      this.podiumRevealDone = true;
+      return;
+    }
     const reveal = (i: number) =>
       this.stageEl.querySelector(`[data-pod="${i}"]`)?.classList.remove("veil");
     setTimeout(() => reveal(2), 1000);
@@ -294,6 +313,7 @@ class Spectator {
       reveal(0);
       this.confetti ??= new Confetti();
       this.confetti.burst(240);
+      this.podiumRevealDone = true; // 以後は遅れて届いた確定値で再描画可
     }, 3800);
   }
 }

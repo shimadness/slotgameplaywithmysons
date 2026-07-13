@@ -491,10 +491,14 @@ async function playDrop(): Promise<void> {
 }
 
 async function finishDropRush(): Promise<void> {
+  // ★大会の確定(finalize)は busy を見て待つ。ラッシュ終了バナー〜ダブルアップまで
+  // busy=true を保持し、「ダブルアップ後の最終スコア」が確定してから finalize させる。
+  // （旧: バナー中に busy=false になり、ダブルアップ前スコアで確定→自分/他者/観戦がズレた）
+  busy = true;
+  hud.setBusy(true);
   const total = rushWinTotal;
   state.endRush();
   exitRushFx();
-  hud.setBusy(false); // SPINボタンの表示を "RUSH SPIN" → "SPIN" に戻す
   hud.update();
   sfx.winBig();
   effects.burst(160);
@@ -503,8 +507,6 @@ async function finishDropRush(): Promise<void> {
   // 総獲得メダルでダブルアップに突入。total はラッシュ中に加算済みなので、
   // 一旦戻して「賭ける元手」にし、ダブルアップ結果(final)を改めて反映する（上限なし）。
   if (total > 0) {
-    busy = true;
-    hud.setBusy(true);
     state.credits -= total; // lastWin は触らずメダルだけ戻す（overlayで隠れる）
     state.save();
     const final = await doubleUp.start(total, state.bet, {
@@ -513,12 +515,16 @@ async function finishDropRush(): Promise<void> {
     });
     state.addWin(final);
     hud.animateWin(final);
-    busy = false;
-    hud.setBusy(false);
     hud.update();
     eventUI.notifyWin(final); // 大会: ラッシュ総獲得の速報
     await considerRanking(final); // ラッシュ総獲得（ダブルアップ後）でランキング判定
   }
+
+  busy = false;
+  hud.setBusy(false);
+  hud.update();
+  // 大会: ダブルアップ後の確定スコアを即時反映（この後 tick の finalize も同値で確定）
+  eventUI.reportScoreNow();
 
   maybeAutoNext();
 }
@@ -658,18 +664,25 @@ async function resolveSlot(ev: SpinEvaluation): Promise<void> {
 }
 
 async function finishRush(): Promise<void> {
+  // finishDropRush と同様、確定演出中は busy=true を保持して大会 finalize を待たせる
+  // （5リールはダブルアップ無しだが、バナー中に確定処理が割り込むのを防ぐ）。
+  busy = true;
+  hud.setBusy(true);
   const total = rushWinTotal;
   state.endRush();
   engine.setFreeMode(false); // 通常帯へ戻す
   board.setStrips(engine.strips);
   exitRushFx();
-  hud.setBusy(false); // SPINボタンの表示を "RUSH SPIN" → "SPIN" に戻す
   hud.update();
   sfx.winBig();
   effects.burst(160);
   await effects.banner(`👺 天狗フリーゲーム 終了！ 獲得 ${total.toLocaleString()}`, 2400);
   eventUI.notifyWin(total); // 大会: フリーゲーム総獲得の速報
   await considerRanking(total); // フリーゲーム総獲得でランキング判定
+  busy = false;
+  hud.setBusy(false);
+  hud.update();
+  eventUI.reportScoreNow(); // 大会: 確定スコアを即時反映
   maybeAutoNext();
 }
 
