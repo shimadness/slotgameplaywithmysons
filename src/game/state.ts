@@ -1,5 +1,6 @@
 // ===== ゲーム状態（プレイヤー別 クレジット / ベット / RUSH / 設定） ===
 import { DEFAULT_SETTEI, SETTEI_RTP } from "./drop";
+import { getItem, setItem, removeItem } from "./storage";
 
 // ベット段（× FIVE_REEL_UNIT がクレジットの TOTAL BET）。
 // 最大 500×20 = 10000（DROP の上限と揃える＝ランキング動線）。
@@ -69,7 +70,7 @@ export interface PlayerSummary {
 
 function readJSON<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = getItem(key);
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
@@ -77,9 +78,9 @@ function readJSON<T>(key: string): T | null {
 }
 function writeJSON(key: string, value: unknown): void {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    setItem(key, JSON.stringify(value));
   } catch {
-    /* localStorage 不可環境は無視 */
+    /* 永続化不可環境は無視 */
   }
 }
 
@@ -396,7 +397,7 @@ export class GameState {
     this.eventRevived = false;
     if (key) {
       try {
-        localStorage.removeItem(key);
+        removeItem(key);
       } catch { /* ignore */ }
     }
     this.inRush = false;

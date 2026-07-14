@@ -39,6 +39,7 @@ const IS_APP_LIKE = capPlatform !== "web" || isStandalonePWA;
 
 const app = document.getElementById("app")!;
 const engine = new ReelEngine();
+// 永続データ（メダル等）は boot.ts の hydrate() で読み込み済み前提でここに来る。
 const state = new GameState();
 const sfx = new Sfx();
 
