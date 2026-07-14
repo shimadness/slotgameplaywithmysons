@@ -3,6 +3,10 @@
 // getBoundingClientRect に反映される＝この割り算が成立。実機確認済み）。
 // これにより、起動後に画像/フォントで盤面が伸びても ResizeObserver で追従して縮め直す。
 // body高さ/overflowは触らない（iOSの真っ暗バグ回避）。縮小のみ・下限0.4クランプ。
+//
+// 【重要】この関数は「盤面のモードが確定した後（syncModeUI 実行後）」に呼ぶこと。
+// DROP盤面が見えている状態で初回測定すると背が高く測れ、過剰縮小→確定後に戻す
+// ＝画面がガタッと縮んで戻る（5リールでの画面ブレの主因）。呼び出し順は main.ts 参照。
 export function installFitScreen(cabinet: HTMLElement): void {
   let applied = 1; // 現在あてている zoom 値
   const SAFETY = 6; // 念のための余白(px)。測定誤差や遅延伸長でもスクロールさせない

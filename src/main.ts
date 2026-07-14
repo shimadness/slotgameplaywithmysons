@@ -323,9 +323,6 @@ if (capPlatform === "web" && "serviceWorker" in navigator) {
   });
 }
 
-// 画面に必ず1画面で収める（zoom方式・堅牢版）
-installFitScreen(app.querySelector(".cabinet") as HTMLElement);
-
 // ---- モード切替 ----------------------------------------------------
 app.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -352,6 +349,11 @@ function syncModeUI(): void {
 }
 // 起動時：保存済みモード（5リール等）に復元
 syncModeUI();
+
+// 画面に必ず1画面で収める（zoom方式・堅牢版）。
+// 必ず syncModeUI() の後に呼ぶ：先に呼ぶと隠れる前のDROP盤面まで測って過剰縮小し、
+// 確定後に戻る＝5リールで画面がガタつく主因になる。
+installFitScreen(app.querySelector(".cabinet") as HTMLElement);
 
 // ---- 設定（ペイアウト率 1〜6）切替 ----------------------------------
 // 設定（ペイアウト率）は廃止 — DROPは本家準拠の固定配当。
