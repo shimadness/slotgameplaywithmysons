@@ -998,6 +998,13 @@ html.native-app .rush-rays { display: none; }
   cursor: pointer;
   transition: transform 0.08s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
+/* <a> をボタンとして使う場合（更新案内の「更新する」等）もボタンと同じ見た目に */
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
 .btn:hover:not(:disabled) { filter: brightness(1.15); }
 .btn:active:not(:disabled) { transform: translateY(2px); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }

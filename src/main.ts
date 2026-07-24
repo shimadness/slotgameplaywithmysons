@@ -20,6 +20,7 @@ import { Hud } from "./ui/hud";
 import { DoubleUp } from "./ui/doubleup";
 import { RankingUI } from "./ui/ranking";
 import { EventUI } from "./ui/event";
+import { checkForUpdate } from "./ui/updatePrompt";
 import { haptics } from "./native/haptics";
 import { installFitScreen } from "./ui/fitScreen";
 import { Capacitor } from "@capacitor/core";
@@ -979,7 +980,10 @@ function pace(ms: number): Promise<void> {
 hud.setMuted(sfx.muted);
 hud.setDu(state.duEnabled);
 
+// ネイティブアプリのみ：配布中の最新ビルドより古ければ更新を案内（web/PWAは対象外）
+void checkForUpdate();
+
 // dev検証用ハンドル（vite devサーバーでのみ有効）
 if ((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV) {
-  (window as unknown as { __dev?: unknown }).__dev = { state, eventUI, hud };
+  (window as unknown as { __dev?: unknown }).__dev = { state, eventUI, hud, checkForUpdate };
 }

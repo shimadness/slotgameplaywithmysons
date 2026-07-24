@@ -17,6 +17,7 @@
     "events": {
       "$code": { ".read": true, ".write": true,
         ".validate": "$code.length >= 3 && $code.length <= 8" }
-    }
+    },
+    "appmeta": { ".read": true, ".write": false }
   }
 }
