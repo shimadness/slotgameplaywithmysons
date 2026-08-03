@@ -4,7 +4,7 @@
 import { serverNow } from "../event/api";
 import {
   EventClient,
-  GRACE_MS,
+  SETTLE_CAP_MS,
   endAtOf,
   remainingMs,
   sanitizeCode,
@@ -143,7 +143,9 @@ class Spectator {
         const allDone =
           Object.values(snap.players ?? {}).length > 0 &&
           Object.values(snap.players ?? {}).every((p) => p.done);
-        next = allDone || serverNow() > endAt + GRACE_MS + 4000 ? "podium" : "counting";
+        // 全員の確定(done)を待って発表（プレイヤー画面と同じ基準）。
+        // 落ちた端末対策で SETTLE_CAP_MS 超過時は手持ちで発表（遅着値は再描画で追従）。
+        next = allDone || serverNow() > endAt + SETTLE_CAP_MS ? "podium" : "counting";
       }
     }
     if (next !== this.phase) this.enterPhase(next);
@@ -185,6 +187,12 @@ class Spectator {
         </div>`;
     } else if (this.phase === "running" || this.phase === "counting") {
       this.paintBoard();
+      if (this.phase === "counting") {
+        // まだプレイ中（ラッシュ/ダブルアップ消化中）の人数を出す
+        const waiting = this.standings().filter((s) => !s.done).length;
+        const o = this.stageEl.querySelector(".sp-counting");
+        if (o) o.textContent = waiting > 0 ? `🏁 集計中… のこり ${waiting}人` : "🏁 集計中…";
+      }
     } else if (this.phase === "podium") {
       // リベール演出後に、遅れて確定した値（時間切れ後のラッシュ＋ダブルアップ等）が
       // 届いたら順位を静かに描き直す。演出中は触らない（署名が変わっても待つ）。

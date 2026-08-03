@@ -8,7 +8,7 @@ import type { GameState } from "../game/state";
 import type { Sfx } from "../audio/sfx";
 import {
   COUNTDOWN_MS,
-  GRACE_MS,
+  SETTLE_CAP_MS,
   EventClient,
   endAtOf,
   randomCode,
@@ -81,6 +81,10 @@ export class EventUI {
   private seenFeed = new Set<string>();
   private feedPrimed = false;
   private lastBeepSec = -1;
+  /** 表彰式に描いた順位の署名（遅れて確定した値の検知用）。 */
+  private ceremonySig = "";
+  /** リベール演出が完了したか（完了後のみ遅着値で描き直す）。 */
+  private ceremonyRevealDone = false;
 
   constructor(private deps: EventDeps) {
     this.el = document.createElement("div");
@@ -378,6 +382,8 @@ export class EventUI {
     this.spins = 0;
     this.finalized = false;
     this.brokeReported = false;
+    this.ceremonySig = "";
+    this.ceremonyRevealDone = false;
     this.deps.state.beginEvent(this.client!.code, this.client!.pid, meta.seed);
     this.deps.onEnter();
     this.phase = "playing";
@@ -472,11 +478,21 @@ export class EventUI {
     if (this.phase === "playing" || this.phase === "ended") {
       await this.sendHeartbeat(false);
       this.consumeFeed(snap, false);
+      return;
+    }
+    // 発表後：遅れて確定した値（ラッシュ/ダブルアップ消化勢）が届いたら静かに描き直す
+    if (this.phase === "ceremony" && this.ceremonyRevealDone && snap.players) {
+      const standings = this.standingsOf(snap.players);
+      if (this.sigOf(standings) !== this.ceremonySig) void this.showCeremony(snap, true);
     }
   }
 
   private async sendHeartbeat(force: boolean): Promise<void> {
     if (!this.client) return;
+    // 精算中(busy)は送らない：ダブルアップ中は「賭け金を一旦差し引いた途中の値」に
+    // なっており、COLLECT前の額が観戦モニターへ流れてしまう。確定タイミングの
+    // 強制送信（スピン終了/ダブルアップ後/復活）だけが値を更新する。
+    if (this.deps.isBusy() && !force) return;
     const credits = Math.floor(this.deps.state.credits);
     const changed = credits !== this.lastSent.credits || this.spins !== this.lastSent.spins;
     this.heartbeatSkip++;
@@ -568,26 +584,67 @@ export class EventUI {
       done: true,
     });
     void this.client.feed("final", final);
-    // 遅れて確定する人（ラッシュ駆け込み）を待ってから発表
-    const waitMs = Math.max(this.endAt + GRACE_MS - serverNow(), 1500);
-    this.showPanel(`<div class="ev-panel ev-counting"><div class="ev-counting-spin">🏁</div>集計中…</div>`);
+    // 全員の確定(done)を待ってから発表（観戦モニターと同じ挙動）。
+    // 自分のタイムアップ時点の値で見切り発表すると、ラッシュ/ダブルアップ消化中の
+    // 人の最終値が反映されず観戦モニターと食い違う（バグ報告その1）。
+    // 落ちた端末が done を書けない場合に備えて SETTLE_CAP_MS を上限に発表し、
+    // 発表後に届いた確定値は poll 側の再描画で追従する。
     this.phase = "ceremony";
-    setTimeout(() => void this.showCeremony(), waitMs);
+    this.ceremonyRevealDone = false;
+    this.showPanel(
+      `<div class="ev-panel ev-counting"><div class="ev-counting-spin">🏁</div><span data-counting>集計中…</span></div>`
+    );
+    const settleStart = serverNow();
+    const iv = window.setInterval(() => {
+      void (async () => {
+        if (this.phase !== "ceremony" || this.ceremonyRevealDone) {
+          clearInterval(iv);
+          return;
+        }
+        const snap = await this.client?.snap();
+        if (!snap) return; // 通信失敗はスキップ（次の周回で再試行）
+        const players = Object.values(snap.players ?? {});
+        const waiting = players.filter((p) => !p.done).length;
+        const label = this.el.querySelector("[data-counting]");
+        if (label) label.textContent = waiting > 0 ? `集計中… のこり ${waiting}人` : "集計中…";
+        const allDone = players.length > 0 && waiting === 0;
+        if (allDone || serverNow() - settleStart > SETTLE_CAP_MS) {
+          clearInterval(iv);
+          void this.showCeremony(snap);
+        }
+      })();
+    }, 1500);
   }
 
-  private async showCeremony(): Promise<void> {
-    const snap = await this.client?.snap();
-    const players = snap?.players ?? {};
-    const standings = Object.entries(players)
+  /** 順位配列（credits降順・同点は登録の早い方）。 */
+  private standingsOf(
+    players: Record<string, EventPlayer>
+  ): Array<EventPlayer & { pid: string }> {
+    return Object.entries(players)
       .map(([pid, p]) => ({ pid, ...p }))
       .sort((a, b) => b.credits - a.credits || (a.at ?? 0) - (b.at ?? 0));
+  }
+
+  /** 順位の署名（発表後の遅着値検知用）。 */
+  private sigOf(standings: Array<EventPlayer & { pid: string }>): string {
+    return standings.map((s) => `${s.pid}:${s.credits}:${s.done ? 1 : 0}`).join(",");
+  }
+
+  /**
+   * 表彰式。instant=true はリベール演出なしで即表示
+   * （発表後に遅れて確定した値が届いたときの静かな描き直しに使う）。
+   */
+  private async showCeremony(snap?: EventSnap | null, instant = false): Promise<void> {
+    const s = snap ?? (await this.client?.snap());
+    const standings = this.standingsOf(s?.players ?? {});
+    this.ceremonySig = this.sigOf(standings);
 
     const badge = (p: EventPlayer) =>
       p.st === "broke" ? " 💀" : p.st === "revived" ? " ♻️" : "";
     const pod = (i: number) => {
       const p = standings[i];
       if (!p) return `<div class="ev-pod empty"></div>`;
-      return `<div class="ev-pod pod${i + 1} veil" data-pod="${i}">
+      return `<div class="ev-pod pod${i + 1}${instant ? "" : " veil"}" data-pod="${i}">
         <div class="ev-pod-rank">${["🥇", "🥈", "🥉"][i]}</div>
         <div class="ev-pod-name">${escapeHtml(p.name)}${badge(p)}</div>
         <div class="ev-pod-score">${p.credits.toLocaleString()}</div>
@@ -608,8 +665,11 @@ export class EventUI {
         <h2>🏁 けっか はっぴょう</h2>
         <div class="ev-podium-stage">${pod(1)}${pod(0)}${pod(2)}</div>
         ${rest ? `<ol class="ev-final-list">${rest}</ol>` : ""}
-        <button class="btn primary hidden" data-end>おわる</button>
+        <button class="btn primary${instant ? "" : " hidden"}" data-end>おわる</button>
       </div>`);
+    this.el.querySelector("[data-end]")!.addEventListener("click", () => void this.exit());
+
+    if (instant) return; // 再描画時は演出なし・おわるも出したまま
 
     const reveal = (i: number) => {
       const el = this.el.querySelector<HTMLElement>(`[data-pod="${i}"]`);
@@ -628,8 +688,8 @@ export class EventUI {
     setTimeout(() => reveal(0), 3600);
     setTimeout(() => {
       this.el.querySelector("[data-end]")?.classList.remove("hidden");
+      this.ceremonyRevealDone = true; // 以後は遅着値が届いたら静かに描き直す
     }, 4400);
-    this.el.querySelector("[data-end]")!.addEventListener("click", () => void this.exit());
   }
 
   private async exit(): Promise<void> {

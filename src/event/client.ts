@@ -49,6 +49,12 @@ export interface EventSnap {
 export const COUNTDOWN_MS = 3000;
 /** タイムアップ後、遅れて確定する人（ラッシュ消化中など）を待つ猶予 */
 export const GRACE_MS = 8000;
+/**
+ * 結果発表が「全員の確定(done)」を待つ上限。ラッシュ消化やダブルアップの判断は
+ * 数十秒かかり得るので長め。落ちた端末が done を書けないまま放置しても
+ * これを超えたら手持ちのデータで発表する（発表後の遅着値は再描画で追従）。
+ */
+export const SETTLE_CAP_MS = 90_000;
 
 export const EV_LOCAL_KEY = "triple-slot.event";
 
