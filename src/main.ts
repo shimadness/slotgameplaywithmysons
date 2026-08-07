@@ -19,6 +19,7 @@ import { Effects } from "./ui/effects";
 import { Hud } from "./ui/hud";
 import { DoubleUp } from "./ui/doubleup";
 import { RankingUI } from "./ui/ranking";
+import { Tutorial } from "./ui/tutorial";
 import { EventUI } from "./ui/event";
 import { checkForUpdate } from "./ui/updatePrompt";
 import { haptics } from "./native/haptics";
@@ -70,6 +71,7 @@ app.innerHTML = `
           <button class="paytable-btn" data-rank>🏆 ランキング</button>
           ${!IS_TAIKAI ? `<button class="paytable-btn" data-shop>🛒 SHOP</button>` : ""}
           ${IS_TAIKAI || IS_APP_LIKE ? `<button class="paytable-btn" data-event>👑 メダル王</button>` : ""}
+          <button class="paytable-btn" data-tutorial>❓ あそびかた</button>
           <button class="paytable-btn" data-help>配当表</button>
         </div>
       </div>
@@ -108,6 +110,14 @@ app.appendChild(ranking.el);
 app.querySelector("[data-rank]")!.addEventListener("click", () =>
   ranking.openBoard(state.mode)
 );
+
+// あそびかたチュートリアル（初回はプレイヤー選択後に自動表示・以降はヘッダーから）
+const tutorial = new Tutorial(sfx);
+app.appendChild(tutorial.el);
+app.querySelector("[data-tutorial]")!.addEventListener("click", () => tutorial.open());
+/** 起動時点で初回だったか（プレイヤー選択の完了後にチュートリアルを自動で開く判定用。
+    state.firstRun は switchPlayer で消えるためここで固定しておく）。 */
+const bootFirstRun = state.firstRun;
 
 // 1ゲームの獲得メダル（ダブルアップ後の最終額）が TOP10 入りなら祝福モーダル。
 // 通信失敗してもゲームは止めない（store 側が throw しない）。
@@ -744,6 +754,8 @@ function renderPlayerList(): void {
       updatePlayerName();
       hud.update();
       closePlayerPicker();
+      // 初回起動のときだけ、プレイヤーを選んだ流れでチュートリアルを1回だけ出す
+      if (bootFirstRun && !IS_TAIKAI) tutorial.maybeAutoOpen();
     });
   });
 }
