@@ -978,6 +978,19 @@ html.native-app .rush-rays { display: none; }
 /* 「クリア」は3文字で一番折返しやすい → さらに字間を詰めて1行に収める */
 .bet-group.drop [data-clear-btn] { letter-spacing: -0.5px; }
 .controls > [data-spin-btn] { flex: 2 1 130px; }
+/* SPINは「SPIN → SPINNING → RUSH SPIN」と文言が変わる。ネイティブアプリでは
+   flex-basis:auto（内容幅）のため、文言が変わるたびにボタン幅→行の折返しまで
+   変わり、スピンのたびに画面全体がガタつく（fitScreenのzoom再計算も誘発）。
+   最長文言2種を高さ0の不可視ブロックで敷き、どの表示でも内容幅（min-content）
+   が動かないよう固定する。※JSは textContent を書き換えるが疑似要素は消えない */
+.controls > [data-spin-btn]::after {
+  content: "SPINNING\A RUSH SPIN";
+  white-space: pre;
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
 /* トグルでテキストが変わるボタンは、最長表示ぶんの固定幅にして
    幅が動かないようにする（色・文言だけ変わる）。SPINもこれで安定する。 */
 .controls > [data-auto-btn] { flex: 0 0 auto; min-width: 88px; text-align: center; }
