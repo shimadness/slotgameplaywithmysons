@@ -3,7 +3,7 @@
 // ・3箇所から1つ選び、ディーラーより強い目なら勝ち（賭け分が倍）。
 // ・各回 COLLECT / 半分賭け / 全部賭け（価値1のとき半分は不可）。
 // ・価値が UPPER_CAP を超えたら強制 COLLECT。
-// ・3リールが全て同じ＝スペシャルボーナスで強制終了。
+// ・3リールが全て同じ＝スペシャルボーナス（COLLECT WIN が倍率アップ。継続も選べる）。
 import { DSYMBOLS, type DSym } from "./dropEngine";
 
 /** 強さ順（弱→強）。ダブルアップ専用の10段ラダー。 */
@@ -15,10 +15,11 @@ export function rank(s: DSym): number { return DU_LADDER.indexOf(s); }
 export function duGlyph(s: DSym): string { return DSYMBOLS[s].glyph; }
 export function duColor(s: DSym): string { return DSYMBOLS[s].color; }
 
-/** スペシャルボーナス配当（3つ揃いのシンボル別。BET倍率）。 */
+/** スペシャルボーナス（3つ揃いのシンボル別。COLLECT WIN に掛かる倍率）。
+ *  最弱でも×2＝通常勝ちと同等以上なので、どの局面で引いても損しない。 */
 export const SPECIAL_BONUS: Record<DSym, number> = {
-  cherry: 30, orange: 45, plum: 60, bell: 150,
-  bar: 300, bar2: 450, bar3: 600, blue7: 900, red7: 1500, gold7: 3000,
+  cherry: 2, orange: 2, plum: 3, bell: 3,
+  bar: 4, bar2: 5, bar3: 6, blue7: 8, red7: 10, gold7: 20,
   wild: 0, rush7: 0,
 };
 

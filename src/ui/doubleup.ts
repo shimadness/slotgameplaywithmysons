@@ -1,9 +1,9 @@
 // ===== ダブルアップ UI（DOUBLE UP CHALLENGE オーバーレイ）===========
 // 勝利後に表示。ディーラーより強い目を3箇所から当てれば配当2倍。
 // COLLECT / 半分（セーブ）/ 全部 を選択。価値が UPPER_CAP 超で強制 COLLECT。
-// 3リール全揃いでスペシャルボーナス→強制終了。
+// 3リール全揃いでスペシャルボーナス＝COLLECT WIN が倍率アップ（継続も選べる）。
 //   const du = new DoubleUp(sfx);  app.appendChild(du.el);
-//   const final = await du.start(win, lineBet);  state.addWin(final);
+//   const final = await du.start(win);  state.addWin(final);
 import type { Sfx } from "../audio/sfx";
 import {
   DU_LADDER,
@@ -27,7 +27,6 @@ export class DoubleUp {
   // 状態
   private atRisk = 0; // 賭けにさらしている価値（COLLECT WIN の中身）
   private save = 0; // セーブ（ロック済みで負けても残る）
-  private lineBet = 1;
   private canRetry = false; // SHOP: 負けを1回だけリトライできる権利
   private onRetryUsed: (() => void) | null = null;
   private round: DURound = dealRound();
@@ -60,12 +59,10 @@ export class DoubleUp {
   // ---- 公開: 勝負開始（最終獲得額を resolve）------------------------
   start(
     win: number,
-    lineBet: number,
     opts?: { canRetry?: boolean; onRetryUsed?: () => void }
   ): Promise<number> {
     this.atRisk = win;
     this.save = 0;
-    this.lineBet = lineBet;
     this.canRetry = opts?.canRetry ?? false;
     this.onRetryUsed = opts?.onRetryUsed ?? null;
     this.el.classList.remove("hidden");
@@ -186,17 +183,18 @@ export class DoubleUp {
 
   // ---- 勝敗判定・精算 ----------------------------------------------
   private settle(picked: number): void {
-    // スペシャル（3つ揃い）が最優先
+    // スペシャル（3つ揃い）が最優先：COLLECT WIN（賭け分＋SAVE）が倍率アップ。
+    // 終了はせず、次のラウンドで COLLECT／継続を選べる。
     const special = isSpecial(this.round);
     if (special != null) {
-      this.atRisk *= 2;
-      const bonus = SPECIAL_BONUS[special] * this.lineBet;
-      const total = this.atRisk + this.save + bonus;
+      const mult = SPECIAL_BONUS[special];
+      this.atRisk *= mult;
+      this.save *= mult;
       this.reelEls.forEach((r) => r.classList.add("win"));
       this.sfx.bonus();
-      this.msg(`★ スペシャルボーナス！ ${duGlyph(special)}×3  +${bonus.toLocaleString()} ★`);
+      this.msg(`★ スペシャルボーナス！ ${duGlyph(special)}×3  COLLECT WIN ×${mult}！ ★`);
       this.updateMeters();
-      window.setTimeout(() => this.finish(total), 1800);
+      window.setTimeout(() => this.beginRound(), 2200);
       return;
     }
 
@@ -289,7 +287,7 @@ export class DoubleUp {
         (s) =>
           `<div class="du-bonus-row"><span class="du-bonus-sym" style="color:${duColor(
             s
-          )}">${duGlyph(s)}×3</span><span class="du-bonus-pay">×${SPECIAL_BONUS[s]}</span></div>`
+          )}">${duGlyph(s)}×3</span><span class="du-bonus-pay">WIN×${SPECIAL_BONUS[s]}</span></div>`
       )
       .join("");
     return `

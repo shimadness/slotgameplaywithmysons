@@ -158,7 +158,7 @@ async function resolveWin(win: number): Promise<void> {
     return;
   }
   busy = true; // ダブルアップ中はスピン禁止
-  const final = await doubleUp.start(win, state.bet, {
+  const final = await doubleUp.start(win, {
     canRetry: state.shopDuRetry,
     onRetryUsed: () => state.consumeShopDuRetry(),
   });
@@ -524,7 +524,7 @@ async function finishDropRush(): Promise<void> {
   if (total > 0) {
     state.credits -= total; // lastWin は触らずメダルだけ戻す（overlayで隠れる）
     state.save();
-    const final = await doubleUp.start(total, state.bet, {
+    const final = await doubleUp.start(total, {
       canRetry: state.shopDuRetry,
       onRetryUsed: () => state.consumeShopDuRetry(),
     });
@@ -824,7 +824,7 @@ function buildPaytable(): void {
 
   // ④ ダブルアップ：スペシャルボーナス（3つ揃い）
   const duBonus = [...DU_LADDER].reverse().map((s) =>
-    `<span class="pt-chip"><b style="color:${duColor(s)}">${duGlyph(s)}×3</b> ×${SPECIAL_BONUS[s]}</span>`
+    `<span class="pt-chip"><b style="color:${duColor(s)}">${duGlyph(s)}×3</b> WIN×${SPECIAL_BONUS[s]}</span>`
   ).join("");
 
   overlay.innerHTML = `
@@ -853,9 +853,9 @@ function buildPaytable(): void {
       <h3 class="pt-h">③ ダブルアップ（両モード共通）</h3>
       <div class="pt-modes">
         <p>WIN後に挑戦できます。ディーラーの目より<b>強い目を3つの中から当てれば配当2倍</b>。<b>COLLECT</b>（降りる）／<b>半分かける</b>（残りはSAVEで確保）／<b>全部かける</b>から選べます（価値1のときは半分不可）。</p>
-        <p>3つすべて同じ目が出ると<b>スペシャルボーナス</b>で強制終了。<b>上限なし</b>＝勝てば何度でも挑戦できます（負けると賭けた分は没収）。</p>
+        <p>3つすべて同じ目が出ると<b>スペシャルボーナス</b>！ そのときの<b>COLLECT WINが倍率アップ</b>して、そのまま続けるか選べます。<b>上限なし</b>＝勝てば何度でも挑戦できます（負けると賭けた分は没収）。</p>
       </div>
-      <p class="pt-sub">スペシャルボーナス（BET倍率）</p>
+      <p class="pt-sub">スペシャルボーナス（COLLECT WIN倍率）</p>
       <div class="pt-chips">${duBonus}</div>
 
       <p class="pt-foot">配当はすべて1BET（全ライン有効）。倍率はBET1枚あたりの値です。</p>
