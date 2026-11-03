@@ -20,6 +20,7 @@ import { Hud } from "./ui/hud";
 import { DoubleUp } from "./ui/doubleup";
 import { RankingUI } from "./ui/ranking";
 import { Tutorial } from "./ui/tutorial";
+import { BugReportUI } from "./ui/bugReport";
 import { EventUI } from "./ui/event";
 import { checkForUpdate } from "./ui/updatePrompt";
 import { haptics } from "./native/haptics";
@@ -73,6 +74,7 @@ app.innerHTML = `
           ${IS_TAIKAI || IS_APP_LIKE ? `<button class="paytable-btn" data-event>👑 メダル王</button>` : ""}
           <button class="paytable-btn" data-tutorial>❓ あそびかた</button>
           <button class="paytable-btn" data-help>配当表</button>
+          <button class="paytable-btn" data-bug title="バグを報告">🐞 報告</button>
         </div>
       </div>
     </header>
@@ -118,6 +120,19 @@ app.querySelector("[data-tutorial]")!.addEventListener("click", () => tutorial.o
 /** 起動時点で初回だったか（プレイヤー選択の完了後にチュートリアルを自動で開く判定用。
     state.firstRun は switchPlayer で消えるためここで固定しておく）。 */
 const bootFirstRun = state.firstRun;
+
+// バグ報告（RTDB bugreports へ送信 → GitHub Actions が Issue 化）
+const bugReport = new BugReportUI(sfx, () => ({
+  mode: state.mode,
+  credits: Math.floor(state.credits),
+  bet: state.totalBet,
+  inRush: state.inRush,
+  inEvent: state.inEvent,
+  busy,
+  autoPlay,
+}));
+app.appendChild(bugReport.el);
+app.querySelector("[data-bug]")!.addEventListener("click", () => bugReport.open());
 
 // 1ゲームの獲得メダル（ダブルアップ後の最終額）が TOP10 入りなら祝福モーダル。
 // 通信失敗してもゲームは止めない（store 側が throw しない）。

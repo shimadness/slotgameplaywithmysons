@@ -18,6 +18,25 @@
       "$code": { ".read": true, ".write": true,
         ".validate": "$code.length >= 3 && $code.length <= 8" }
     },
-    "appmeta": { ".read": true, ".write": false }
+    "appmeta": { ".read": true, ".write": false },
+    "bugreports": { ".read": false,
+      "$id": {
+        ".write": "!data.exists() && newData.exists()",
+        ".validate": "$id.matches(/^[a-z0-9]{10,32}$/) && newData.hasChildren(['v','cat','text','steps','device','at','ctx','errs']) && newData.child('device').isString() && newData.parent().parent().child('bugreport_rl').child(newData.child('device').val()).child('at').val() === now",
+        "v": {".validate": "newData.val() === 1"},
+        "cat": {".validate": "newData.isString() && newData.val().matches(/^(freeze|display|medal|sound|other)$/)"},
+        "text": {".validate": "newData.isString() && newData.val().length >= 5 && newData.val().length <= 1000"},
+        "steps": {".validate": "newData.isString() && newData.val().length <= 500"},
+        "device": {".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{8,24}$/)"},
+        "at": {".validate": "newData.val() === now"},
+        "ctx": {".validate": "newData.isString() && newData.val().length <= 4000"},
+        "errs": {".validate": "newData.isString() && newData.val().length <= 6000"},
+        "$other": {".validate": false} } },
+    "bugreport_rl": { ".read": false,
+      "$device": {
+        ".write": "newData.exists() && (!data.exists() || now - data.child('at').val() >= 60000)",
+        ".validate": "$device.matches(/^[a-z0-9]{8,24}$/) && newData.hasChildren(['at'])",
+        "at": {".validate": "newData.val() === now"},
+        "$other": {".validate": false} } }
   }
 }

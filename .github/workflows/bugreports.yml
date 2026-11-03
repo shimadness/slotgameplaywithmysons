@@ -1,0 +1,40 @@
+name: Bug reports → Issues
+
+# アプリ内のバグ報告（RTDB bugreports）を1時間ごとに取りに行き、GitHub Issue にする。
+# 必要な Secret: FIREBASE_SERVICE_ACCOUNT（Firebase のサービスアカウント鍵 JSON）
+# 未設定ならスキップして成功扱い（README『バグ報告』参照）。
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Issue を作らず内容を表示するだけ"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: bugreports
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Convert reports to issues
+        run: node scripts/bugreports-to-issues.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}

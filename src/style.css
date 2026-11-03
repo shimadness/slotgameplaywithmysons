@@ -1841,6 +1841,31 @@ html.native-app .controls > [data-refill-btn] { flex: 0 0 auto; }
 .ev-actions { display: flex; gap: 10px; justify-content: center; margin-top: 6px; }
 .ev-note { min-height: 18px; margin: 10px 0 0; color: var(--neon); font-size: 13px; }
 
+/* --- 🐞 バグ報告（.ev-overlay/.ev-panel を流用） --- */
+.bug-panel { text-align: left; }
+.bug-panel h2, .bug-panel .ev-sub, .bug-panel .ev-note { text-align: center; }
+.bug-label { margin: 12px 0 2px; color: #cfe0ff; font-size: 13px; font-weight: 800; }
+.bug-req {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  color: #2a1c00;
+  background: var(--gold);
+  border-radius: 6px;
+  vertical-align: 1px;
+}
+.bug-cats { flex-wrap: wrap; justify-content: flex-start; margin: 6px 0 4px; }
+.bug-cat { padding: 7px 12px; font-size: 13px; }
+.ev-input.bug-text {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  resize: vertical;
+  font-family: inherit;
+}
+.ev-input.bug-text.small { font-size: 14px; }
+.bug-fine { margin: 4px 0 0; color: #789; font-size: 11px; line-height: 1.5; }
+
 /* --- ロビー --- */
 .ev-code {
   font-size: 64px;
