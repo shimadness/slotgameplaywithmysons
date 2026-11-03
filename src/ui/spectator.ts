@@ -6,6 +6,7 @@ import {
   EventClient,
   SETTLE_CAP_MS,
   endAtOf,
+  isAwaited,
   remainingMs,
   sanitizeCode,
   type EventPlayer,
@@ -147,10 +148,11 @@ class Spectator {
       if (rem > 0) next = "running";
       else {
         const endAt = endAtOf(meta) ?? 0;
+        const now = serverNow();
         const allDone =
           Object.values(snap.players ?? {}).length > 0 &&
-          Object.values(snap.players ?? {}).every((p) => p.done);
-        // 全員の確定(done)を待って発表（プレイヤー画面と同じ基準）。
+          Object.values(snap.players ?? {}).every((p) => !isAwaited(p, now));
+        // 全員の確定(done)を待って発表（プレイヤー画面と同じ基準）。合図の途絶えた人は待たない。
         // 落ちた端末対策で SETTLE_CAP_MS 超過時は手持ちで発表（遅着値は再描画で追従）。
         next = allDone || serverNow() > endAt + SETTLE_CAP_MS ? "podium" : "counting";
       }
@@ -196,7 +198,8 @@ class Spectator {
       this.paintBoard();
       if (this.phase === "counting") {
         // まだプレイ中（ラッシュ/ダブルアップ消化中）の人数を出す
-        const waiting = this.standings().filter((s) => !s.done).length;
+        const now = serverNow();
+        const waiting = this.standings().filter((s) => isAwaited(s, now)).length;
         const o = this.stageEl.querySelector(".sp-counting");
         if (o) o.textContent = waiting > 0 ? `🏁 集計中… のこり ${waiting}人` : "🏁 集計中…";
       }
