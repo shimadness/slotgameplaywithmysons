@@ -2,7 +2,7 @@
 // Firebase SDK ではなく素の fetch(REST) を使う。理由:
 //  - WebSocket が使えない環境（プレビュー/一部WebView）でも確実に動く
 //  - 観戦ページ(watch.html)が SDK 無しの超軽量バンドルで済む
-// ルールはテスト/公開 read-write 前提（docs/rtdb-rules.json 参照）。
+// 書き込みは docs/rtdb-rules.json の events ルールで検証される（構造・状態遷移・時刻）。
 // dev検証用: localStorage "triple-slot.dburl" でモックDBに差し替え可能
 const DB_OVERRIDE = (() => {
   try {

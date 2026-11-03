@@ -21,10 +21,47 @@
         "at": {".validate": "newData.isNumber() && newData.val() >= now - 3600000 && newData.val() <= now + 3600000"},
         "$other": {".validate": false} } },
     "events": {
-      "$code": { ".read": true, ".write": true,
-        ".validate": "$code.length >= 3 && $code.length <= 8" }
+      "$code": { ".read": true,
+        "meta": {
+          ".write": "$code.matches(/^[A-Z0-9]{3,8}$/) && newData.exists() && (!data.exists() || data.child('status').val() === 'lobby' || data.child('status').val() === 'done' || (data.child('status').val() === 'running' && (now > data.child('startAt').val() + 3000 + data.child('durationMs').val() + 600000 || (newData.child('status').val() === 'done' && newData.child('startAt').val() === data.child('startAt').val() && newData.child('host').val() === data.child('host').val() && newData.child('durationMs').val() === data.child('durationMs').val() && newData.child('seed').val() === data.child('seed').val()))))",
+          ".validate": "newData.hasChildren(['status','createdAt','durationMs','seed','host']) && (newData.child('status').val() !== 'running' || newData.child('startAt').isNumber()) && (newData.child('status').val() !== 'running' || data.child('status').val() === 'running' || newData.child('startAt').val() === now)",
+          "status": {".validate": "newData.isString() && newData.val().matches(/^(lobby|running|done)$/)"},
+          "createdAt": {".validate": "newData.isNumber()"},
+          "startAt": {".validate": "newData.isNumber()"},
+          "durationMs": {".validate": "newData.isNumber() && newData.val() >= 60000 && newData.val() <= 3600000"},
+          "seed": {".validate": "newData.isNumber() && newData.val() >= 0"},
+          "host": {".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{1,16}$/)"},
+          "aborted": {".validate": "newData.isBoolean()"},
+          "$other": {".validate": false} },
+        "players": {
+          ".write": "!newData.exists() && (!data.parent().child('meta').exists() || data.parent().child('meta/status').val() === 'done' || (data.parent().child('meta/status').val() === 'running' && now > data.parent().child('meta/startAt').val() + 3000 + data.parent().child('meta/durationMs').val() + 600000) || (data.parent().child('meta/status').val() === 'lobby' && now - data.parent().child('meta/createdAt').val() > 86400000))",
+          "$pid": {
+            ".write": "!newData.exists() || newData.parent().parent().child('meta').exists()",
+            ".validate": "$pid.matches(/^[a-z0-9]{1,16}$/) && newData.hasChildren(['name','credits','spins','st'])",
+            "name": {".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 12"},
+            "credits": {".validate": "newData.isNumber()"},
+            "spins": {".validate": "newData.isNumber() && newData.val() >= 0"},
+            "st": {".validate": "newData.isString() && newData.val().matches(/^(alive|revived|broke)$/)"},
+            "done": {".validate": "newData.isBoolean()"},
+            "at": {".validate": "newData.val() === now"},
+            "$other": {".validate": false} } },
+        "feed": {
+          ".write": "!newData.exists() && (!data.parent().child('meta').exists() || data.parent().child('meta/status').val() === 'done' || (data.parent().child('meta/status').val() === 'running' && now > data.parent().child('meta/startAt').val() + 3000 + data.parent().child('meta/durationMs').val() + 600000) || (data.parent().child('meta/status').val() === 'lobby' && now - data.parent().child('meta/createdAt').val() > 86400000))",
+          "$fid": {
+            ".write": "!data.exists() && newData.exists() && newData.parent().parent().child('meta').exists()",
+            ".validate": "newData.hasChildren(['t','name','at'])",
+            "t": {".validate": "newData.isString() && newData.val().matches(/^(join|rush|tengu|bigwin|broke|revive|final)$/)"},
+            "name": {".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 12"},
+            "amt": {".validate": "newData.isNumber()"},
+            "at": {".validate": "newData.val() === now"},
+            "$other": {".validate": false} } },
+        "clock": {
+          "$pid": {
+            ".write": "$code.matches(/^[A-Z0-9]{3,8}$/) && $pid.matches(/^[a-z0-9]{1,16}$/)",
+            ".validate": "newData.val() === now" } } }
     },
     "appmeta": { ".read": true, ".write": false },
+    "typing": { ".read": true, ".write": true },
     "bugreports": { ".read": false,
       "$id": {
         ".write": "!data.exists() && newData.exists()",
