@@ -61,7 +61,47 @@
             ".validate": "newData.val() === now" } } }
     },
     "appmeta": { ".read": true, ".write": false },
-    "typing": { ".read": true, ".write": true },
+    "typing": {
+      "rooms": {
+        "$roomCode": {
+          ".read": true,
+          ".write": true,
+          ".validate": "$roomCode.length >= 3 && $roomCode.length <= 12"
+        }
+      },
+      "ranking": {
+        "$diff": {
+          ".read": true,
+          ".write": true,
+          ".indexOn": ["timeMs"],
+          "$id": {
+            ".validate": "newData.hasChildren(['names','timeMs','at'])",
+            "timeMs": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "at": { ".validate": "newData.isNumber()" },
+            "names": {
+              "$i": { ".validate": "newData.isString() && newData.val().length <= 10" }
+            }
+          }
+        }
+      },
+      "survival": {
+        "$diff": {
+          ".read": true,
+          ".write": true,
+          ".indexOn": ["kills"],
+          "$id": {
+            ".validate": "newData.hasChildren(['names','kills','waves','timeMs','at'])",
+            "kills": { ".validate": "newData.isNumber() && newData.val() >= 1" },
+            "waves": { ".validate": "newData.isNumber() && newData.val() >= 1" },
+            "timeMs": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "at": { ".validate": "newData.isNumber()" },
+            "names": {
+              "$i": { ".validate": "newData.isString() && newData.val().length <= 10" }
+            }
+          }
+        }
+      }
+    },
     "bugreports": { ".read": false,
       "$id": {
         ".write": "!data.exists() && newData.exists()",
