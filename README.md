@@ -118,11 +118,59 @@ src/
     board.ts         5リール描画＆回転アニメ
     effects.ts       ハイライト/勝利・連鎖ポップ/RUSHバナー/パーティクル
     hud.ts           メーターと操作ボタン
+    bugReport.ts     🐞 バグ報告フォーム（RTDB bugreports へ送信）
+  diag.ts            JSエラーの記録（バグ報告に自動添付）
+scripts/
+  bugreports-to-issues.mjs  バグ報告 → GitHub Issue 変換（Actions から定期実行）
 rtp.mjs              RTP（ペイアウト率）計測ハーネス
 SPEC.md              実装仕様書（詳細）
 ```
 
 詳しい仕様・実装の解説は [SPEC.md](SPEC.md) を参照。
+
+---
+
+## 🐞 バグ報告（アプリ内 → GitHub Issue）
+
+ヘッダーの **🐞 報告** から送ると、次の流れで GitHub Issue になります。
+
+```
+アプリ（フォーム）
+  │  分類・本文 ＋ 自動添付（バージョン/コミット・端末・ゲーム状態・直近のJSエラー）
+  ▼
+RTDB bugreports/<id>     ← クライアントは「書き込み専用・作成のみ」
+  │  .github/workflows/bugreports.yml（毎時23分・手動実行も可）
+  ▼
+GitHub Issue（labels: bug-report, triage-needed, [has-js-error]）→ RTDB からは削除
+```
+
+GitHub のトークンはクライアントに持たせず、Actions 側が取りに行く方式です
+（Spark プランでは Cloud Functions が使えないため）。
+
+### いたずら・連投への対策（第1段階）
+
+| 場所 | 対策 |
+|---|---|
+| RTDB ルール | 読み取り不可／上書き・削除不可／文字数上限／決まった項目以外は拒否／時刻はサーバー時刻のみ／**1端末60秒に1件** |
+| 変換スクリプト | 1回の実行で最大20件／**同じ端末は1回の実行で3件まで**（超過分は破棄）／未トリアージが30件以上なら作成を一時停止 |
+| Issue 本文 | 報告文はコードブロックに入れる（メンション・リンク・HTML を無効化）。「未検証の外部入力」と明記 |
+| 個人情報 | プレイヤー名は送らない。端末IDは乱数で、Issue にはハッシュだけを載せる。**リポジトリが public なので Issue も公開される**（フォームに「名前は書かないで」と表示） |
+
+修正の自動化はまだしていません（Issue 化まで）。
+
+### セットアップ（初回のみ）
+
+1. **RTDB ルールを反映**: Firebase コンソール → Realtime Database → ルール に
+   [`docs/rtdb-rules.json`](docs/rtdb-rules.json) の内容を貼って公開する
+   （`bugreports` / `bugreport_rl` が追加分）。
+2. **サービスアカウント鍵を作る**: Firebase コンソール → プロジェクトの設定 →
+   サービス アカウント → 「新しい秘密鍵の生成」で JSON をダウンロードする。
+3. **GitHub Secret に登録**: リポジトリの Settings → Secrets and variables → Actions →
+   New repository secret で、名前を `FIREBASE_SERVICE_ACCOUNT`、値を JSON の中身すべてにする。
+4. **動作確認**: Actions → 「Bug reports → Issues」→ Run workflow（`dry_run` にチェックを
+   入れると Issue を作らずにログで内容だけ確認できる）。
+
+Secret が未設定の間、このワークフローは何もせず成功で終わります。
 
 ---
 
