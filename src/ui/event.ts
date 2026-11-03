@@ -119,6 +119,10 @@ export class EventUI {
 
   /** スピンを止めるべきか。RUSH消化はタイムアップ後も許可（駆け込みドラマ）。 */
   blocksSpin(): boolean {
+    // 大会パネル（参加モーダル・確認ダイアログ等）が出ている間は常にスピン禁止。
+    // 特に参加モーダルは phase=idle のまま出るので、ここで止めないと
+    // キー操作などでモーダルの裏のゲームが回ってしまう。
+    if (!this.el.classList.contains("hidden")) return true;
     switch (this.phase) {
       case "lobby":
       case "countdown":
@@ -260,6 +264,12 @@ export class EventUI {
     this.el.querySelector("[data-close]")!.addEventListener("click", () => this.hidePanel());
     this.el.querySelector<HTMLButtonElement>("[data-entry]")!.addEventListener("click", async (e) => {
       const btn = e.currentTarget as HTMLButtonElement;
+      // スピン/精算（ダブルアップ含む）中の参加は不可。精算中に大会ウォレットへ
+      // 切り替わると、ダブルアップのCOLLECTが大会メダルに混入してしまう。
+      if (this.deps.isBusy()) {
+        status.textContent = "ゲームの せいさん中… おわってから もういちど";
+        return;
+      }
       const name = (nameIn.value.trim() || "ゲスト").slice(0, 12);
       const code = sanitizeCode(codeIn.value) || randomCode();
       btn.disabled = true;
