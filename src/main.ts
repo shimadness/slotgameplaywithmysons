@@ -390,10 +390,24 @@ buildShop();
 
 // キーボード: Space / Enter でスピン
 window.addEventListener("keydown", (e) => {
-  if (e.code === "Space" || e.code === "Enter") {
-    e.preventDefault();
-    void play();
+  if (e.code !== "Space" && e.code !== "Enter") return;
+  // 入力欄・ボタンにフォーカスがあるときは発火しない。
+  // 大会の参加モーダルで なまえ/あいことば を入力中の Space/Enter で
+  // モーダルの裏のゲームが通常ウォレットのまま回ってしまい、勝つと
+  // ダブルアップがモーダルの裏で開始→大会開始と同時に現れる事故の対策。
+  const t = e.target as HTMLElement | null;
+  if (
+    t &&
+    (t.tagName === "INPUT" ||
+      t.tagName === "TEXTAREA" ||
+      t.tagName === "SELECT" ||
+      t.tagName === "BUTTON" ||
+      t.isContentEditable)
+  ) {
+    return;
   }
+  e.preventDefault();
+  void play();
 });
 
 // ---- モードディスパッチ --------------------------------------------
@@ -524,6 +538,10 @@ async function finishDropRush(): Promise<void> {
   if (total > 0) {
     state.credits -= total; // lastWin は触らずメダルだけ戻す（overlayで隠れる）
     state.save();
+    // 大会: 賭けに出した分を差し引いた値を即送信。これをしないと、ラッシュ中に
+    // 自動COLLECTで送信済みの総獲得が「ダブルアップでまだCOLLECTしていないのに」
+    // 観戦モニターに表示され続ける（通常勝利のダブルアップと同じ見え方に揃える）。
+    eventUI.reportScoreNow();
     const final = await doubleUp.start(total, {
       canRetry: state.shopDuRetry,
       onRetryUsed: () => state.consumeShopDuRetry(),
