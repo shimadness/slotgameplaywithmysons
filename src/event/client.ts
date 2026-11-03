@@ -56,6 +56,19 @@ export const GRACE_MS = 8000;
  * これを超えたら手持ちのデータで発表する（発表後の遅着値は再描画で追従）。
  */
 export const SETTLE_CAP_MS = 90_000;
+/**
+ * 生存の合図（players/<pid>/at＝最後に報告したサーバー時刻）がこれより古い参加者は、
+ * 結果発表で待たない。裏に回したタブは Chrome がタイマーを1分に1回まで間引いたり
+ * 凍結したりするため、done を書けないまま全員を SETTLE_CAP_MS 待たせていた（Issue #7）。
+ * プレイ中の端末は少なくとも約10秒ごとに合図を送る（ダブルアップ等の精算中も）。
+ */
+export const STALE_MS = 20_000;
+
+/** 結果発表で「確定を待つべき人」か（未確定で、最近も合図がある）。 */
+export function isAwaited(p: EventPlayer, now: number): boolean {
+  if (p.done) return false;
+  return typeof p.at === "number" && now - p.at <= STALE_MS;
+}
 
 export const EV_LOCAL_KEY = "triple-slot.event";
 

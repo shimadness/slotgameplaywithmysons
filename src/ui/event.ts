@@ -11,6 +11,7 @@ import {
   SETTLE_CAP_MS,
   EventClient,
   endAtOf,
+  isAwaited,
   randomCode,
   sanitizeCode,
   type EventMeta,
@@ -539,7 +540,14 @@ export class EventUI {
     // 精算中(busy)は送らない：ダブルアップ中は「賭け金を一旦差し引いた途中の値」に
     // なっており、COLLECT前の額が観戦モニターへ流れてしまう。確定タイミングの
     // 強制送信（スピン終了/ダブルアップ後/復活）だけが値を更新する。
-    if (this.deps.isBusy() && !force) return;
+    if (this.deps.isBusy() && !force) {
+      // 値は送らないが「まだ ここにいる」合図（at）だけは送り続ける。結果発表では
+      // 合図の途絶えた人を待たないので、精算中の人が置いていかれないように。
+      if (++this.heartbeatSkip < 4) return;
+      this.heartbeatSkip = 0;
+      await this.client.report({});
+      return;
+    }
     const credits = Math.floor(this.deps.state.credits);
     const changed = credits !== this.lastSent.credits || this.spins !== this.lastSent.spins;
     this.heartbeatSkip++;
@@ -651,7 +659,10 @@ export class EventUI {
         const snap = await this.client?.snap();
         if (!snap) return; // 通信失敗はスキップ（次の周回で再試行）
         const players = Object.values(snap.players ?? {});
-        const waiting = players.filter((p) => !p.done).length;
+        // 合図の途絶えた人（裏タブで凍結・端末が落ちた等）は待たない（Issue #7）。
+        // その人の確定が後から届いたら、発表後の再描画で順位に反映される。
+        const now = serverNow();
+        const waiting = players.filter((p) => isAwaited(p, now)).length;
         const label = this.el.querySelector("[data-counting]");
         if (label) label.textContent = waiting > 0 ? `集計中… のこり ${waiting}人` : "集計中…";
         const allDone = players.length > 0 && waiting === 0;
