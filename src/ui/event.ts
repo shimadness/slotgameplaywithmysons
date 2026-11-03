@@ -18,7 +18,7 @@ import {
   type EventSnap,
   type FeedItem,
 } from "../event/client";
-import { serverNow } from "../event/api";
+import { clockSynced, serverNow } from "../event/api";
 
 /** 全員共通の初期メダル */
 export const EVENT_SEED = 1000;
@@ -29,6 +29,10 @@ const BIGWIN_FEED = 5000;
 /** 選べる制限時間（分） */
 const DURATIONS_MIN = [5, 10, 15];
 const DEFAULT_MIN = 15;
+/** サーバー時刻の測り直し間隔（端末時計の変更・ドリフト対策） */
+const CLOCK_RESYNC_MS = 30_000;
+/** 未同期のままタイムアップを迎えたとき、端末時計を信じる前に同期を試す回数 */
+const TIMEUP_SYNC_TRIES = 3;
 
 type Phase = "idle" | "lobby" | "countdown" | "playing" | "ended" | "ceremony";
 
@@ -85,6 +89,10 @@ export class EventUI {
   private ceremonySig = "";
   /** リベール演出が完了したか（完了後のみ遅着値で描き直す）。 */
   private ceremonyRevealDone = false;
+  /** サーバー時刻の計測中か／最後に計測した時刻（performance.now 基準） */
+  private clockSyncing = false;
+  private lastClockSync = -Infinity;
+  private timeupSyncTries = 0;
 
   constructor(private deps: EventDeps) {
     this.el = document.createElement("div");
@@ -110,6 +118,11 @@ export class EventUI {
     this.rescueBtn.innerHTML = `♻️ ふっかつ <b>+${RESCUE_AMOUNT}</b>`;
     this.rescueBtn.addEventListener("click", () => this.doRescue());
     document.body.appendChild(this.rescueBtn);
+
+    // スリープ/バックグラウンド復帰時は時計がズレている可能性があるので測り直す
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.resyncClock();
+    });
   }
 
   // ================= 公開 API（main.ts から呼ぶ） =====================
@@ -173,6 +186,7 @@ export class EventUI {
     const local = EventClient.local();
     if (!local) return;
     const client = new EventClient(local.code, local.pid, local.name);
+    await client.syncClock(); // 残り時間の判定より先にサーバー時刻へ合わせる
     const snap = await client.snap();
     const meta = snap?.meta;
     if (!meta || meta.status === "done") {
@@ -270,6 +284,9 @@ export class EventUI {
       const pid =
         prev && prev.code === code ? prev.pid : "p" + Math.random().toString(36).slice(2, 9);
       const client = new EventClient(code, pid, name);
+      // 開催中判定・カウントダウン・残り時間はすべてサーバー時刻基準。先に合わせる。
+      await client.syncClock();
+      this.lastClockSync = performance.now();
       const r = await client.createOrJoin({
         durationMs: durationMin * 60_000,
         seed: EVENT_SEED,
@@ -384,6 +401,7 @@ export class EventUI {
     this.brokeReported = false;
     this.ceremonySig = "";
     this.ceremonyRevealDone = false;
+    this.timeupSyncTries = 0;
     this.deps.state.beginEvent(this.client!.code, this.client!.pid, meta.seed);
     this.deps.onEnter();
     this.phase = "playing";
@@ -397,6 +415,14 @@ export class EventUI {
     if (!this.tickIv) this.tickIv = window.setInterval(() => this.tick(), 250);
     if (!this.pollIv) this.pollIv = window.setInterval(() => void this.poll(), 2500);
   }
+  /** サーバー時刻を測り直す（多重起動しない・失敗しても無視）。 */
+  private resyncClock(): void {
+    if (!this.client || this.clockSyncing) return;
+    this.clockSyncing = true;
+    this.lastClockSync = performance.now();
+    void this.client.syncClock().finally(() => (this.clockSyncing = false));
+  }
+
   private stopLoops(): void {
     clearInterval(this.tickIv);
     clearInterval(this.pollIv);
@@ -406,6 +432,16 @@ export class EventUI {
   private tick(): void {
     if (this.phase === "playing") {
       const rem = Math.max(0, this.endAt - serverNow());
+      if (rem <= 0 && !clockSynced() && this.timeupSyncTries < TIMEUP_SYNC_TRIES) {
+        // サーバー時刻を一度も測れていない＝端末時計だけが根拠。その時計が進んで
+        // いると本当はまだ時間内なので、確定させる前に同期を試す（失敗が続いたら
+        // 端末時計で判定＝オフラインでも大会自体は終われる）。
+        if (!this.clockSyncing) {
+          this.timeupSyncTries++;
+          this.resyncClock();
+        }
+        return;
+      }
       this.paintTimer(rem);
       this.checkBroke();
       if (rem <= 0) {
@@ -458,6 +494,7 @@ export class EventUI {
     const snap = await this.client.snap();
     if (!snap) return;
     this.meta = snap.meta ?? this.meta;
+    if (performance.now() - this.lastClockSync > CLOCK_RESYNC_MS) this.resyncClock();
 
     // ホストが中断したら全端末が離脱（ロビー含む）。
     if (snap.meta?.aborted) {

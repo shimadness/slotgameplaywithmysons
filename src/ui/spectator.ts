@@ -97,7 +97,14 @@ class Spectator {
     this.boardEl = document.createElement("div");
     this.boardEl.className = "sp-rows";
 
-    void this.poll();
+    // 残り時間・集計待ち判定はサーバー時刻基準。端末時計のズレを測って合わせる
+    // （プロジェクターPCの時計がズレていても表示がプレイヤー画面と揃うように）。
+    const resync = () => void this.client.syncClock();
+    void this.client.syncClock().finally(() => void this.poll());
+    setInterval(resync, 30_000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") resync();
+    });
     setInterval(() => void this.poll(), 1500);
     setInterval(() => this.tickClock(), 250);
   }
