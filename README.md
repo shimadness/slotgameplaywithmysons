@@ -130,6 +130,28 @@ SPEC.md              実装仕様書（詳細）
 
 ---
 
+## RTDB ルール
+
+ランキング・大会・バグ報告・アプリ更新告知は Firebase Realtime Database（プロジェクト
+`triple-slot-ranking`）を使う。ルールの正本は [`docs/rtdb-rules.json`](docs/rtdb-rules.json)。
+
+| ノード | 誰が | できること |
+|---|---|---|
+| `drop` / `slot` | 誰でも | 読む・新しい記録を足す（消す・書き換えるのは不可） |
+| `events/<CODE>` | 誰でも | 読む・大会の進行（作成→開始→終了／中断、参加・報告・退出）。進行中の大会のリセットや開始時刻・初期メダル・ホストの変更、速報の改ざん、大会ごとの削除は不可 |
+| `bugreports` | 誰でも | 書くだけ（1端末60秒に1件・読めない） |
+| `appmeta` | 誰でも | 読むだけ（Firebase コンソールから手で更新） |
+| `typing` | — | **別ゲーム（Type Heroes）のデータ**。同じ DB に同居しているので、ルールは消さずに残す |
+
+ログインの仕組みが無いので「本人かどうか」はルールで判定できない（他人のスコアの
+書き換え、ありえない高スコアの登録、あいことばを知っている人による中断などは防げない）。
+
+**反映のしかた**: Firebase コンソール → Realtime Database → 「ルール」タブ →
+エディタの中身を `docs/rtdb-rules.json` の内容に置き換えて「公開」。
+公開前に今のルールをテキストに控えておくと、戻したいときに貼り直せる。
+
+---
+
 ## 🐞 バグ報告（アプリ内 → GitHub Issue）
 
 ヘッダーの **🐞 報告** から送ると、次の流れで GitHub Issue になります。
@@ -160,9 +182,7 @@ GitHub のトークンはクライアントに持たせず、Actions 側が取�
 
 ### セットアップ（初回のみ）
 
-1. **RTDB ルールを反映**: Firebase コンソール → Realtime Database → ルール に
-   [`docs/rtdb-rules.json`](docs/rtdb-rules.json) の内容を貼って公開する
-   （`bugreports` / `bugreport_rl` が追加分）。
+1. **RTDB ルールを反映**: 下の「RTDB ルール」の手順で公開する。
 2. **サービスアカウント鍵を作る**: Firebase コンソール → プロジェクトの設定 →
    サービス アカウント → 「新しい秘密鍵の生成」で JSON をダウンロードする。
 3. **GitHub Secret に登録**: リポジトリの Settings → Secrets and variables → Actions →
