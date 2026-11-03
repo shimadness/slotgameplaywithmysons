@@ -3,8 +3,9 @@
 //   events/<CODE>/meta    { status, createdAt, startAt?, durationMs, seed, host }
 //   events/<CODE>/players/<pid> { name, credits, spins, st, done?, at }
 //   events/<CODE>/feed/<pushId> { t, name, amt?, at }
+//   events/<CODE>/clock/<pid>   サーバー時刻の計測用（{".sv":"timestamp"} を書いて読む）
 // あいことば(CODE)が同じ端末どうしが同じ大会に入る。作った人がホスト。
-import { evDelete, evGet, evPatch, evPost, serverNow, SV_TIME } from "./api";
+import { evDelete, evGet, evPatch, evPost, serverNow, SV_TIME, syncServerClock } from "./api";
 
 export type EventStatus = "lobby" | "running" | "done";
 
@@ -220,6 +221,11 @@ export class EventClient {
   async leave(): Promise<void> {
     await evDelete(this.path(`/players/${this.pid}`));
     EventClient.clearLocal();
+  }
+
+  /** 端末時計とサーバー時刻のズレを測り直す（タイマーの基準合わせ）。 */
+  syncClock(): Promise<boolean> {
+    return syncServerClock(this.path(`/clock/${this.pid}`));
   }
 
   // --- 進行中 ----------------------------------------------------------
